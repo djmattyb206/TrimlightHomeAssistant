@@ -1,0 +1,19 @@
+{
+  "config": {
+    "flow_title": "Trimlight",
+    "step": {
+      "user": {
+        "title": "Connect to Trimlight",
+        "description": "Enter your Trimlight API credentials.",
+        "data": {
+          "client_id": "Client ID",
+          "client_secret": "Client Secret",
+          "device_id": "Device ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Trimlight."
+    }
+  }
+}

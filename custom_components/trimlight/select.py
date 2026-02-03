@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+from homeassistant.components.select import SelectEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+
+from .const import DOMAIN
+from .entity import TrimlightEntity
+
+
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = data["coordinator"]
+    async_add_entities(
+        [
+            TrimlightBuiltInSelect(hass, entry.entry_id, coordinator),
+            TrimlightCustomSelect(hass, entry.entry_id, coordinator),
+        ]
+    )
+
+
+class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
+    _attr_name = "Trimlight Built-in Preset"
+
+    def __init__(self, hass: HomeAssistant, entry_id: str, coordinator) -> None:
+        super().__init__(hass, entry_id, coordinator)
+        self._attr_unique_id = f"{entry_id}_builtin_select"
+
+    @property
+    def options(self) -> list[str]:
+        builtins = self._hass.data[DOMAIN][self._entry_id]["builtins"]
+        return [row["name"] for row in builtins]
+
+    @property
+    def current_option(self) -> str | None:
+        data = self.coordinator.data or {}
+        if data.get("current_effect_category") != 0:
+            return None
+        effect_id = data.get("current_effect_id")
+        if effect_id is None:
+            return None
+        builtins = self._hass.data[DOMAIN][self._entry_id]["builtins"]
+        for row in builtins:
+            if row.get("id") == effect_id or row.get("mode") == effect_id:
+                return row["name"]
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        builtins = self._hass.data[DOMAIN][self._entry_id]["builtins"]
+        match = next((row for row in builtins if row["name"] == option), None)
+        if not match:
+            return
+
+        api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        brightness = self._hass.data[DOMAIN][self._entry_id]["last_brightness"]
+        await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness)
+        await self.coordinator.async_refresh()
+
+
+class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
+    _attr_name = "Trimlight Custom Preset"
+
+    def __init__(self, hass: HomeAssistant, entry_id: str, coordinator) -> None:
+        super().__init__(hass, entry_id, coordinator)
+        self._attr_unique_id = f"{entry_id}_custom_select"
+
+    @property
+    def options(self) -> list[str]:
+        presets = (self.coordinator.data or {}).get("custom_effects") or self._hass.data[DOMAIN][
+            self._entry_id
+        ].get("custom_cache", [])
+        return [(e.get("name") or "").strip() or "(no name)" for e in presets]
+
+    @property
+    def current_option(self) -> str | None:
+        data = self.coordinator.data or {}
+        if data.get("current_effect_category") != 2:
+            return None
+        effect_id = data.get("current_effect_id")
+        if effect_id is None:
+            return None
+
+        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+        for e in presets:
+            if e.get("id") == effect_id:
+                return (e.get("name") or "").strip() or "(no name)"
+        return None
+
+    async def async_select_option(self, option: str) -> None:
+        presets = (self.coordinator.data or {}).get("custom_effects") or self._hass.data[DOMAIN][
+            self._entry_id
+        ].get("custom_cache", [])
+        match = None
+        for e in presets:
+            name = (e.get("name") or "").strip() or "(no name)"
+            if name == option:
+                match = e
+                break
+
+        if not match:
+            return
+
+        api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        await api.run_effect(int(match.get("id")))
+        await self.coordinator.async_refresh()

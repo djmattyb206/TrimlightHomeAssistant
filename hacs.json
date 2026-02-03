@@ -1,0 +1,7 @@
+{
+  "name": "Trimlight",
+  "description": "Home Assistant custom integration for Trimlight EDGE lights.",
+  "render_readme": true,
+  "content_in_root": false,
+  "domain": "trimlight"
+}
