@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Connect to Trimlight",
-        "description": "Enter your Trimlight API credentials. Client ID is the login you use to login to the app. The Client Secret has to be provided to you by the Trimlight developers. Device ID identifies your Trimlight controller (use the TrimlightEdgeControl scripts to discover it).",
+        "description": "Enter your Trimlight API credentials.\n\nClient ID is the login you use to log in to the app.\nClient Secret is provided by Trimlight.\nDevice ID identifies your Trimlight controller (use the TrimlightEdgeControl scripts to discover it).",
         "data": {
           "client_id": "Client ID",
           "client_secret": "Client Secret",

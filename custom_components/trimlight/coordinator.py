@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Any
 
@@ -12,8 +13,10 @@ from .const import DEFAULT_POLL_INTERVAL_SECONDS
 
 class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, api: TrimlightApi) -> None:
+        self._logger = logging.getLogger(__name__)
         super().__init__(
             hass,
+            logger=self._logger,
             name="Trimlight",
             update_interval=timedelta(seconds=DEFAULT_POLL_INTERVAL_SECONDS),
         )
