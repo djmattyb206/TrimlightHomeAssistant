@@ -201,3 +201,7 @@ def build_builtin_presets_from_effects(effects: list[dict]) -> list[dict]:
         builtins.append({"id": e.get("id", e.get("mode")), "name": name, "mode": e.get("mode")})
     builtins.sort(key=lambda r: (r.get("mode", 0), r.get("name", "")))
     return builtins
+
+
+def build_builtin_presets_static() -> list[dict]:
+    return [{"id": mode, "name": name, "mode": mode} for mode, name in sorted(BUILTIN_ANIMATIONS.items())]

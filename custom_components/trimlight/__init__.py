@@ -9,7 +9,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
 from .api import TrimlightApi, TrimlightCredentials
-from .const import CONF_DEVICE_ID, DOMAIN, build_builtin_presets_from_effects
+from .const import CONF_DEVICE_ID, DOMAIN, build_builtin_presets_from_effects, build_builtin_presets_static
 from .coordinator import TrimlightCoordinator
 
 PLATFORMS: list[str] = ["light", "select", "button"]
@@ -45,6 +45,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data[DOMAIN][entry.entry_id]["builtins_refreshed"]:
         effects = (coordinator.data or {}).get("effects") or []
         builtins = build_builtin_presets_from_effects(effects)
+        if not builtins:
+            builtins = build_builtin_presets_static()
         if builtins:
             hass.data[DOMAIN][entry.entry_id]["builtins"] = builtins
             hass.data[DOMAIN][entry.entry_id]["builtins_refreshed"] = True

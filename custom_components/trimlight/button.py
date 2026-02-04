@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, build_builtin_presets_from_effects
+from .const import DOMAIN, build_builtin_presets_from_effects, build_builtin_presets_static
 from .entity import TrimlightEntity
 
 
@@ -30,6 +30,8 @@ class TrimlightRefreshButton(TrimlightEntity, ButtonEntity):
         if not data["builtins_refreshed"]:
             effects = (data["coordinator"].data or {}).get("effects") or []
             builtins = build_builtin_presets_from_effects(effects)
+            if not builtins:
+                builtins = build_builtin_presets_static()
             if builtins:
                 data["builtins"] = builtins
                 data["builtins_refreshed"] = True
