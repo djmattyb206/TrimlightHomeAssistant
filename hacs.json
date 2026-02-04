@@ -1,6 +1,5 @@
 {
   "name": "Trimlight",
   "render_readme": true,
-  "content_in_root": false,
-  "domain": "trimlight"
+  "content_in_root": false
 }

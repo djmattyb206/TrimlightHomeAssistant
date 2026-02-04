@@ -6,8 +6,8 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/djmattyb206/TrimlightHomeAssistant",
-  "issue_tracker": "https://github.com/djmattyb206/TrimlightHomeAssistant/issues",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/djmattyb206/TrimlightHomeAssistant/issues",
   "requirements": [],
   "version": "0.1.0"
 }
