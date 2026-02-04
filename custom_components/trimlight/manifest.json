@@ -1,13 +1,13 @@
 {
   "domain": "trimlight",
   "name": "Trimlight",
-  "version": "0.1.0",
-  "config_flow": true,
-  "documentation": "https://github.com/djmattyb206/TrimlightHomeAssistant",
-  "issue_tracker": "https://github.com/djmattyb206/TrimlightHomeAssistant/issues",
   "codeowners": [
     "@djmattyb206"
   ],
+  "config_flow": true,
+  "documentation": "https://github.com/djmattyb206/TrimlightHomeAssistant",
+  "issue_tracker": "https://github.com/djmattyb206/TrimlightHomeAssistant/issues",
   "iot_class": "cloud_polling",
-  "requirements": []
+  "requirements": [],
+  "version": "0.1.0"
 }
