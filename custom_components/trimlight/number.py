@@ -43,9 +43,24 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         api = data["api"]
         data["last_speed"] = speed
 
-        current_effect = (self.coordinator.data or {}).get("current_effect") or {}
+        coord = self.coordinator.data or {}
+        current_effect = coord.get("current_effect") or {}
         if current_effect:
             brightness = data["last_brightness"]
             await api.preview_effect(current_effect, brightness, speed=speed)
+        else:
+            effect_id = coord.get("current_effect_id")
+            category = coord.get("current_effect_category")
+            brightness = data["last_brightness"]
+            if category == 2:
+                presets = (coord.get("custom_effects") or data.get("custom_cache", []))
+                match = next((e for e in presets if e.get("id") == effect_id), None)
+                if match:
+                    await api.preview_effect(match, brightness, speed=speed)
+            elif category == 0:
+                builtins = data.get("builtins", [])
+                match = next((b for b in builtins if b.get("id") == effect_id or b.get("mode") == effect_id), None)
+                if match:
+                    await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
 
         await self.coordinator.async_refresh()

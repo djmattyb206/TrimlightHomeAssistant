@@ -205,3 +205,24 @@ def build_builtin_presets_from_effects(effects: list[dict]) -> list[dict]:
 
 def build_builtin_presets_static() -> list[dict]:
     return [{"id": mode, "name": name, "mode": mode} for mode, name in sorted(BUILTIN_ANIMATIONS.items())]
+
+
+CUSTOM_EFFECT_MODES = {
+    0: "Static",
+    1: "Chase Forward",
+    2: "Chase Backward",
+    3: "Chase Middle To Out",
+    4: "Chase Out To Middle",
+    5: "Stars",
+    6: "Breath",
+    7: "Comet Forward",
+    8: "Comet Backward",
+    9: "Comet Middle To Out",
+    10: "Comet Out To Middle",
+    11: "Wave Forward",
+    12: "Wave Backward",
+    13: "Wave Middle To Out",
+    14: "Wave Out To Middle",
+    15: "Strobe",
+    16: "Solid Fade",
+}

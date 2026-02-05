@@ -5,7 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import CUSTOM_EFFECT_MODES, DOMAIN
 from .entity import TrimlightEntity
 
 
@@ -18,6 +18,7 @@ async def async_setup_entry(
         [
             TrimlightBuiltInSelect(hass, entry.entry_id, coordinator),
             TrimlightCustomSelect(hass, entry.entry_id, coordinator),
+            TrimlightCustomModeSelect(hass, entry.entry_id, coordinator),
         ]
     )
 
@@ -61,6 +62,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         brightness = self._hass.data[DOMAIN][self._entry_id]["last_brightness"]
         speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
         await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
+
+        # Track last selected preset for sensor fallback
+        self._hass.data[DOMAIN][self._entry_id]["last_selected_preset"] = match.get("name")
         await self.coordinator.async_refresh()
 
 
@@ -115,6 +119,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
 
         # Optimistic UI update: reflect the selected preset immediately
         data = self._hass.data[DOMAIN][self._entry_id]
+        data["last_selected_preset"] = (match.get("name") or "").strip() or "(no name)"
         brightness = match.get("brightness")
         speed = match.get("speed")
         if brightness is not None:
@@ -140,6 +145,80 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                 "current_effect_category": 2,
                 "brightness": current_effect.get("brightness"),
                 "switch_state": 1,
+            }
+        )
+        self.coordinator.async_set_updated_data(updated)
+        await self.coordinator.async_refresh()
+
+
+class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
+    _attr_name = "Trimlight Custom Effect Mode"
+
+    def __init__(self, hass: HomeAssistant, entry_id: str, coordinator) -> None:
+        super().__init__(hass, entry_id, coordinator)
+        self._attr_unique_id = f"{entry_id}_custom_mode"
+
+    @property
+    def options(self) -> list[str]:
+        return [CUSTOM_EFFECT_MODES[i] for i in sorted(CUSTOM_EFFECT_MODES.keys())]
+
+    @property
+    def current_option(self) -> str | None:
+        data = self.coordinator.data or {}
+        switch_state = data.get("switch_state")
+        if switch_state is None or int(switch_state) == 0:
+            return None
+        if data.get("current_effect_category") != 2:
+            return None
+        mode = (data.get("current_effect") or {}).get("mode")
+        if mode is None:
+            return None
+        return CUSTOM_EFFECT_MODES.get(int(mode), str(mode))
+
+    async def async_select_option(self, option: str) -> None:
+        data = self._hass.data[DOMAIN][self._entry_id]
+        coord = self.coordinator.data or {}
+        api = data["api"]
+
+        mode = None
+        for key, label in CUSTOM_EFFECT_MODES.items():
+            if label == option:
+                mode = int(key)
+                break
+        if mode is None:
+            return
+
+        current_effect = coord.get("current_effect") or {}
+        effect_id = coord.get("current_effect_id")
+        effect: dict = {}
+
+        if current_effect and current_effect.get("category") == 2:
+            effect = dict(current_effect)
+        else:
+            presets = (coord.get("custom_effects") or data.get("custom_cache", []))
+            match = next((e for e in presets if e.get("id") == effect_id), None)
+            if match:
+                effect = dict(match)
+
+        if not effect:
+            return
+
+        effect["category"] = 2
+        effect["mode"] = mode
+
+        brightness = data.get("last_brightness", 255)
+        speed = data.get("last_speed", 100)
+        await api.preview_effect(effect, brightness, speed=speed)
+
+        updated = dict(coord)
+        current = dict(updated.get("current_effect") or {})
+        current.update({"category": 2, "mode": mode})
+        updated.update(
+            {
+                "current_effect": current,
+                "current_effect_category": 2,
+                "current_effect_id": effect.get("id", effect_id),
+                "brightness": brightness,
             }
         )
         self.coordinator.async_set_updated_data(updated)

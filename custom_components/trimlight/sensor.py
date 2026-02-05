@@ -66,4 +66,8 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         if _valid_state(builtin_state.state if builtin_state else None):
             return builtin_state.state
 
+        last_selected = self._hass.data[DOMAIN][self._entry_id].get("last_selected_preset")
+        if _valid_state(last_selected):
+            return last_selected
+
         return "Unknown"

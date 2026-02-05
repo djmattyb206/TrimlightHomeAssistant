@@ -38,6 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "builtins_refreshed": bool(stored.get("builtins")),
         "last_brightness": 255,
         "last_speed": 100,
+        "last_selected_preset": None,
         "store": store,
         "debug_path": debug_path,
     }
