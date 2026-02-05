@@ -65,6 +65,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
 
         # Track last selected preset for sensor fallback
         self._hass.data[DOMAIN][self._entry_id]["last_selected_preset"] = match.get("name")
+        # Clear custom selection context when a built-in is chosen
+        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_preset"] = None
+        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = None
         await self.coordinator.async_refresh()
 
 
@@ -178,15 +181,31 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         switch_state = data.get("switch_state")
         if switch_state is None or int(switch_state) == 0:
             return None
-        if data.get("current_effect_category") not in (1, 2):
-            return None
-        mode = (data.get("current_effect") or {}).get("mode")
-        if mode is not None:
-            return CUSTOM_EFFECT_MODES.get(int(mode), str(mode))
+        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+        custom_ids = {e.get("id") for e in presets}
+
+        current_category = data.get("current_effect_category")
+        effect_id = data.get("current_effect_id")
+        last_custom = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_preset")
         last_mode = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_mode")
-        if last_mode is not None:
-            return CUSTOM_EFFECT_MODES.get(int(last_mode), str(last_mode))
-        return None
+
+        is_custom = current_category in (1, 2) or (effect_id in custom_ids) or bool(last_custom)
+        if not is_custom:
+            return None
+
+        mode = (data.get("current_effect") or {}).get("mode")
+        if mode is None and effect_id in custom_ids:
+            match = next((e for e in presets if e.get("id") == effect_id), None)
+            if match:
+                mode = match.get("mode")
+        if mode is None and last_mode is not None:
+            mode = last_mode
+
+        if mode is None:
+            return None
+
+        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = int(mode)
+        return CUSTOM_EFFECT_MODES.get(int(mode), str(mode))
 
     async def async_select_option(self, option: str) -> None:
         data = self._hass.data[DOMAIN][self._entry_id]
@@ -205,7 +224,7 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         effect_id = coord.get("current_effect_id")
         effect: dict = {}
 
-        if current_effect and current_effect.get("category") == 2:
+        if current_effect and current_effect.get("category") in (1, 2):
             effect = dict(current_effect)
         else:
             presets = (coord.get("custom_effects") or data.get("custom_cache", []))
