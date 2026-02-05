@@ -67,8 +67,12 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         data = self.coordinator.data or {}
         optimistic = dict(data)
         optimistic["switch_state"] = 0
+        optimistic["current_effect"] = {}
+        optimistic["current_effect_id"] = None
+        optimistic["current_effect_category"] = None
         self.coordinator.async_set_updated_data(optimistic)
         # Clear last-selected preset context when lights turn off
+        self._hass.data[DOMAIN][self._entry_id]["last_selected_preset"] = None
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_preset"] = None
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = None
         await self.coordinator.async_refresh()
