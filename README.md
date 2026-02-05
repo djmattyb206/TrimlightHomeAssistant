@@ -212,6 +212,8 @@ action:
 - If built-in presets are empty on first load, the integration will fall back to the static built‑in list.
 - API credentials are required for every call; a bad key or secret will cause setup failures.
 - If the current preset shows `Unknown`, select a preset once so it can be cached.
+- Polling interval is 15 seconds (`DEFAULT_POLL_INTERVAL_SECONDS`).
+- UI uses a 20-second on grace window after preset selection to avoid flicker (`FORCED_ON_GRACE_SECONDS`).
 
 ---
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
@@ -7,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, FORCED_ON_GRACE_SECONDS
 from .entity import TrimlightEntity
 
 
@@ -33,7 +34,14 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         switch_state = (self.coordinator.data or {}).get("switch_state")
         if switch_state is None:
             return None
-        return int(switch_state) != 0
+        if int(switch_state) != 0:
+            # Clear any grace window once the device reports on.
+            self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = None
+            return True
+        forced_until = self._hass.data[DOMAIN][self._entry_id].get("forced_on_until")
+        if forced_until is not None and time.monotonic() < forced_until:
+            return True
+        return False
 
     @property
     def brightness(self) -> int | None:

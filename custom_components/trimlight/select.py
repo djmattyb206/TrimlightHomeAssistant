@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import time
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CUSTOM_EFFECT_MODES, DOMAIN
+from .const import CUSTOM_EFFECT_MODES, DOMAIN, FORCED_ON_GRACE_SECONDS
 from .entity import TrimlightEntity
 
 
@@ -76,6 +78,10 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             await api.set_switch_state(1)
         except Exception:
             pass
+        # Keep UI on for a short grace window while the controller catches up.
+        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = (
+            time.monotonic() + FORCED_ON_GRACE_SECONDS
+        )
         brightness = self._hass.data[DOMAIN][self._entry_id]["last_brightness"]
         speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
         await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
@@ -150,6 +156,10 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             await api.set_switch_state(1)
         except Exception:
             pass
+        # Keep UI on for a short grace window while the controller catches up.
+        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = (
+            time.monotonic() + FORCED_ON_GRACE_SECONDS
+        )
         await api.run_effect(int(match.get("id")))
 
         # Optimistic UI update: reflect the selected preset immediately
