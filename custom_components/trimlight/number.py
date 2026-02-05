@@ -20,9 +20,9 @@ async def async_setup_entry(
 class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
     _attr_name = "Trimlight Effect Speed"
     _attr_native_min_value = 0
-    _attr_native_max_value = 255
+    _attr_native_max_value = 100
     _attr_native_step = 1
-    _attr_native_unit_of_measurement = "speed"
+    _attr_native_unit_of_measurement = "%"
     _attr_mode = NumberMode.SLIDER
 
     def __init__(self, hass: HomeAssistant, entry_id: str, coordinator) -> None:
@@ -34,11 +34,11 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         data = self.coordinator.data or {}
         speed = (data.get("current_effect") or {}).get("speed")
         if speed is None:
-            return float(self._hass.data[DOMAIN][self._entry_id]["last_speed"])
-        return float(speed)
+            speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
+        return round((float(speed) / 255.0) * 100.0, 1)
 
     async def async_set_native_value(self, value: float) -> None:
-        speed = int(value)
+        speed = int(round((float(value) / 100.0) * 255.0))
         data = self._hass.data[DOMAIN][self._entry_id]
         api = data["api"]
         data["last_speed"] = speed

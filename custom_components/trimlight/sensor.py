@@ -52,4 +52,18 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
             if b.get("id") == effect_id or b.get("mode") == effect_id:
                 return b.get("name")
 
+        # Final fallback: use HA state of the select entities (if available)
+        def _valid_state(value: str | None) -> bool:
+            if value is None:
+                return False
+            return value not in {"unknown", "unavailable", "none", ""}
+
+        custom_state = self._hass.states.get("select.trimlight_custom_preset")
+        if _valid_state(custom_state.state if custom_state else None):
+            return custom_state.state
+
+        builtin_state = self._hass.states.get("select.trimlight_built_in_preset")
+        if _valid_state(builtin_state.state if builtin_state else None):
+            return builtin_state.state
+
         return "Unknown"
