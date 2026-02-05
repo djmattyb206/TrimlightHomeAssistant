@@ -31,6 +31,12 @@ class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         payload = (data.get("payload") or {}) if isinstance(data, dict) else {}
         effects = (payload.get("effects") or []) if isinstance(payload, dict) else []
         custom_effects = [e for e in effects if e.get("category") == 2]
+        for effect in custom_effects:
+            if effect.get("mode") is None:
+                for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
+                    if effect.get(key) is not None:
+                        effect["mode"] = effect.get(key)
+                        break
         custom_effects.sort(key=lambda e: e.get("id", 9999))
 
         current_effect = payload.get("currentEffect") or {}

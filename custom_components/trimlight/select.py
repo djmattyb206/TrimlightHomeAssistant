@@ -23,6 +23,18 @@ async def async_setup_entry(
     )
 
 
+def _get_effect_mode(effect: dict | None) -> int | None:
+    if not effect:
+        return None
+    mode = effect.get("mode")
+    if mode is not None:
+        return int(mode)
+    for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
+        if effect.get(key) is not None:
+            return int(effect.get(key))
+    return None
+
+
 class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
     _attr_name = "Trimlight Built-in Preset"
 
@@ -59,6 +71,11 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             return
 
         api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        # Ensure the lights are on when a preset is selected.
+        try:
+            await api.set_switch_state(1)
+        except Exception:
+            pass
         brightness = self._hass.data[DOMAIN][self._entry_id]["last_brightness"]
         speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
         await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
@@ -68,6 +85,10 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         # Clear custom selection context when a built-in is chosen
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_preset"] = None
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = None
+        # Optimistic UI update for on/off state
+        updated = dict(self.coordinator.data or {})
+        updated["switch_state"] = 1
+        self.coordinator.async_set_updated_data(updated)
         await self.coordinator.async_refresh()
 
 
@@ -124,6 +145,11 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             return
 
         api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        # Ensure the lights are on when a preset is selected.
+        try:
+            await api.set_switch_state(1)
+        except Exception:
+            pass
         await api.run_effect(int(match.get("id")))
 
         # Optimistic UI update: reflect the selected preset immediately
@@ -131,8 +157,9 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         selected_name = (match.get("name") or "").strip() or "(no name)"
         data["last_selected_preset"] = selected_name
         data["last_selected_custom_preset"] = selected_name
-        if match.get("mode") is not None:
-            data["last_selected_custom_mode"] = int(match.get("mode"))
+        mode = _get_effect_mode(match)
+        if mode is not None:
+            data["last_selected_custom_mode"] = mode
         brightness = match.get("brightness")
         speed = match.get("speed")
         if brightness is not None:
@@ -144,7 +171,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             "id": match.get("id"),
             "name": (match.get("name") or "").strip() or "(no name)",
             "category": 2,
-            "mode": match.get("mode"),
+            "mode": _get_effect_mode(match),
             "brightness": data.get("last_brightness"),
             "speed": data.get("last_speed"),
         }
@@ -197,7 +224,7 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         if mode is None and effect_id in custom_ids:
             match = next((e for e in presets if e.get("id") == effect_id), None)
             if match:
-                mode = match.get("mode")
+                mode = _get_effect_mode(match)
         if mode is None and last_mode is not None:
             mode = last_mode
 
@@ -231,6 +258,8 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
             match = next((e for e in presets if e.get("id") == effect_id), None)
             if match:
                 effect = dict(match)
+                if effect.get("mode") is None:
+                    effect["mode"] = _get_effect_mode(match)
 
         if not effect:
             return

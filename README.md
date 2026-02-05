@@ -49,6 +49,97 @@ These come from your Trimlight EDGE account / device and can be obtained using t
 
 ## How to Use the Features
 
+## Cards You Can Paste
+
+Prerequisite: Install Mushroom cards (HACS -> Frontend -> Mushroom).
+
+### Trimlight Power Tile
+```yaml
+type: tile
+entity: light.trimlight
+vertical: false
+tap_action:
+  action: more-info
+icon_tap_action:
+  action: toggle
+features_position: bottom
+```
+
+### Current Preset (Visible Only When On)
+```yaml
+type: conditional
+conditions:
+  - entity: light.trimlight
+    state: "on"
+card:
+  type: custom:mushroom-template-card
+  primary: "{{ states('sensor.trimlight_current_preset') }}"
+  secondary: ""
+  icon: mdi:led-strip-variant
+grid_options:
+  columns: 6
+  rows: auto
+```
+
+### Speed Control (Visible Only When On)
+```yaml
+type: conditional
+conditions:
+  - entity: light.trimlight
+    state: "on"
+card:
+  type: custom:mushroom-number-card
+  entity: number.trimlight_effect_speed
+  name: Speed Control
+  icon: mdi:speedometer
+  grid_options:
+    columns: 12
+    rows: 2
+```
+
+### Built-In Preset Selector
+```yaml
+type: custom:mushroom-select-card
+entity: select.trimlight_built_in_preset
+name: Trimlight Built In Preset
+primary_info: name
+secondary_info: none
+grid_options:
+  columns: 12
+  rows: 2
+```
+
+### Custom Preset Selector
+```yaml
+type: custom:mushroom-select-card
+entity: select.trimlight_custom_preset
+name: Trimlight Custom Preset
+primary_info: name
+secondary_info: none
+grid_options:
+  columns: 12
+  rows: 2
+```
+
+### Custom Effect Mode (Visible Only When Custom Preset Selected)
+```yaml
+type: conditional
+conditions:
+  - entity: select.trimlight_custom_preset
+    state_not: unknown
+  - entity: select.trimlight_custom_preset
+    state_not: unavailable
+card:
+  type: custom:mushroom-select-card
+  entity: select.trimlight_custom_effect_mode
+  name: Trimlight Custom Effect Mode
+  primary_info: name
+  secondary_info: none
+  grid_options:
+    columns: 12
+    rows: 2
+```
+
 ### Power On/Off
 Use the `light.trimlight` entity:
 - `turn_on` sets `switchState=1`
