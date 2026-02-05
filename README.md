@@ -20,8 +20,11 @@ If you don’t know your `device_id`, use your existing Trimlight scripts in `Tr
 Entities created:
 - `light.trimlight` (on/off + brightness)
 - `select.trimlight_built_in_preset` (built-in animations)
-- `select.trimlight_custom_preset` (your saved custom presets)
-- `button.trimlight_refresh_presets` (refresh preset lists)
+- `select.trimlight_custom_preset` (saved custom presets)
+- `select.trimlight_custom_effect_mode` (custom effect modes)
+- `number.trimlight_effect_speed` (speed slider, 0–100%)
+- `sensor.trimlight_current_preset` (current preset name)
+- `button.trimlight_refresh_presets` (refresh presets lists)
 
 Presets are cached in Home Assistant storage so they persist after restarts. A human-readable cache file is also written to your HA config folder as `trimlight_presets_<entry_id>.json`.
 
@@ -39,6 +42,7 @@ These come from your Trimlight EDGE account / device and can be obtained using t
 
 ### First Run Behavior
 - On the first refresh, built-in presets are pulled from the device and cached.
+- If the device does not return built-ins, the integration uses the static built‑in list.
 - After that, the refresh button only updates custom presets (built-ins are static).
 
 ---
@@ -50,17 +54,38 @@ Use the `light.trimlight` entity:
 - `turn_on` sets `switchState=1`
 - `turn_off` sets `switchState=0`
 
+The UI updates immediately on toggle, then confirms via refresh.
+
 ### Brightness
 Adjust brightness using the `light.trimlight` entity.
-- The integration applies brightness by previewing the current effect with the new brightness.
+- The integration updates the active effect by previewing it with the new brightness.
+- Works for both built‑in and custom presets.
+
+### Speed (Slider)
+Use `number.trimlight_effect_speed`.
+- Displays 0–100% in the UI
+- Converts to 0–255 for the device
+- Updates the currently active effect immediately
 
 ### Select Built-in Presets
 Use `select.trimlight_built_in_preset`.
 - Choosing an option previews the built-in effect.
+- Speed + brightness changes continue to apply to the active built‑in effect.
 
 ### Select Custom Presets
 Use `select.trimlight_custom_preset`.
 - Choosing an option runs the saved custom preset by id.
+- Speed + brightness changes update the active custom effect via preview.
+
+### Custom Effect Modes
+Use `select.trimlight_custom_effect_mode`.
+- Choose a mode (0–16) by name (camel case).
+- Applied to the currently active custom effect.
+
+### Current Preset Sensor
+`sensor.trimlight_current_preset` shows the active preset name.
+- Uses the API’s `currentEffect` when available.
+- Falls back to the last selected preset if needed.
 
 ### Refresh Preset Lists
 Press `button.trimlight_refresh_presets`.
@@ -93,8 +118,9 @@ action:
 ## Notes and Troubleshooting
 
 - If you don’t see custom presets, press the refresh button and check the debug cache file in your HA config folder.
-- If built-in presets are empty on first load, ensure your device returns effects in `/device/get`.
+- If built-in presets are empty on first load, the integration will fall back to the static built‑in list.
 - API credentials are required for every call; a bad key or secret will cause setup failures.
+- If the current preset shows `Unknown`, select a preset once so it can be cached.
 
 ---
 

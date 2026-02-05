@@ -39,6 +39,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "last_brightness": 255,
         "last_speed": 100,
         "last_selected_preset": None,
+        "last_selected_custom_preset": None,
+        "last_selected_custom_mode": None,
         "store": store,
         "debug_path": debug_path,
     }

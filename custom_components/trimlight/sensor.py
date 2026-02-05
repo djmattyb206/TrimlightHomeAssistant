@@ -40,28 +40,35 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         current_category = data.get("current_effect_category")
         current_mode = current_effect.get("mode")
 
-        # Prefer custom preset if currently active
-        if current_category in (1, 2):
-            presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
-            for e in presets:
-                if e.get("id") == effect_id:
-                    return (e.get("name") or "").strip() or "(no name)"
-
-        # Fall back to built-in preset (category 0)
+        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
         builtins = self._hass.data[DOMAIN][self._entry_id].get("builtins", [])
-        for b in builtins:
-            if b.get("id") == effect_id or b.get("mode") == effect_id or b.get("mode") == current_mode:
-                return b.get("name")
 
-        # If category is missing, try to infer from ids
-        if current_category is None and effect_id is not None:
-            presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+        # Prefer custom preset if currently active (category 1/2)
+        if current_category in (1, 2):
             for e in presets:
                 if e.get("id") == effect_id:
                     return (e.get("name") or "").strip() or "(no name)"
+            # If preview (id = -1) or no match, fall through to UI/state fallback
+            # to avoid mislabeling as a built-in.
+        elif current_category == 0:
+            # Built-in preset
             for b in builtins:
-                if b.get("id") == effect_id:
+                if b.get("id") == effect_id or b.get("mode") == effect_id or b.get("mode") == current_mode:
                     return b.get("name")
+        else:
+            # Category missing: try to infer by id first (custom preferred)
+            if effect_id not in (None, -1):
+                for e in presets:
+                    if e.get("id") == effect_id:
+                        return (e.get("name") or "").strip() or "(no name)"
+                for b in builtins:
+                    if b.get("id") == effect_id:
+                        return b.get("name")
+            # If mode > 16, it's definitely built-in
+            if current_mode is not None and int(current_mode) > 16:
+                for b in builtins:
+                    if b.get("mode") == current_mode:
+                        return b.get("name")
 
         # Final fallback: use HA state of the select entities (if available)
         def _valid_state(value: str | None) -> bool:
