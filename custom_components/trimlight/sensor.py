@@ -38,6 +38,7 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
 
         effect_id = data.get("current_effect_id")
         current_category = data.get("current_effect_category")
+        current_mode = current_effect.get("mode")
 
         # Prefer custom preset if currently active
         if current_category == 2:
@@ -49,8 +50,18 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         # Fall back to built-in preset (category 0)
         builtins = self._hass.data[DOMAIN][self._entry_id].get("builtins", [])
         for b in builtins:
-            if b.get("id") == effect_id or b.get("mode") == effect_id:
+            if b.get("id") == effect_id or b.get("mode") == effect_id or b.get("mode") == current_mode:
                 return b.get("name")
+
+        # If category is missing, try to infer from ids
+        if current_category is None and effect_id is not None:
+            presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+            for e in presets:
+                if e.get("id") == effect_id:
+                    return (e.get("name") or "").strip() or "(no name)"
+            for b in builtins:
+                if b.get("id") == effect_id:
+                    return b.get("name")
 
         # Final fallback: use HA state of the select entities (if available)
         def _valid_state(value: str | None) -> bool:
