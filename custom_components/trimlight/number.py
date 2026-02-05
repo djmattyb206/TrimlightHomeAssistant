@@ -52,7 +52,7 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
             effect_id = coord.get("current_effect_id")
             category = coord.get("current_effect_category")
             brightness = data["last_brightness"]
-            if category == 2:
+            if category in (1, 2):
                 presets = (coord.get("custom_effects") or data.get("custom_cache", []))
                 match = next((e for e in presets if e.get("id") == effect_id), None)
                 if match:
@@ -61,6 +61,34 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
                 builtins = data.get("builtins", [])
                 match = next((b for b in builtins if b.get("id") == effect_id or b.get("mode") == effect_id), None)
                 if match:
-                    await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
+                    pixel_len = None
+                    reverse = None
+                    if current_effect and current_effect.get("category") == 0:
+                        pixel_len = current_effect.get("pixelLen")
+                        reverse = current_effect.get("reverse")
+
+                    if pixel_len is None or reverse is None:
+                        effects = (coord.get("effects") or [])
+                        for e in effects:
+                            if e.get("category") == 0 and (
+                                e.get("id") == effect_id
+                                or e.get("mode") == effect_id
+                                or e.get("mode") == current_effect.get("mode")
+                            ):
+                                if pixel_len is None:
+                                    pixel_len = e.get("pixelLen")
+                                if reverse is None:
+                                    reverse = e.get("reverse")
+
+                    pixel_len = 30 if pixel_len is None else int(pixel_len)
+                    reverse = False if reverse is None else bool(reverse)
+
+                    await api.preview_builtin(
+                        match.get("mode", match.get("id")),
+                        brightness=brightness,
+                        speed=speed,
+                        pixel_len=pixel_len,
+                        reverse=reverse,
+                    )
 
         await self.coordinator.async_refresh()

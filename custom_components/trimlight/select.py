@@ -88,7 +88,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         switch_state = data.get("switch_state")
         if switch_state is None or int(switch_state) == 0:
             return None
-        if data.get("current_effect_category") != 2:
+        if data.get("current_effect_category") not in (1, 2):
             return None
         effect_id = data.get("current_effect_id")
         if effect_id is None:
@@ -168,7 +168,7 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         switch_state = data.get("switch_state")
         if switch_state is None or int(switch_state) == 0:
             return None
-        if data.get("current_effect_category") != 2:
+        if data.get("current_effect_category") not in (1, 2):
             return None
         mode = (data.get("current_effect") or {}).get("mode")
         if mode is None:

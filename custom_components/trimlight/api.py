@@ -137,10 +137,17 @@ class TrimlightApi:
     async def preview_effect(
         self, effect: dict[str, Any], brightness: int, speed: int | None = None
     ) -> dict[str, Any]:
+        category = effect.get("category")
+        # Normalize custom category (device may report 2, API expects 1)
+        if category == 2:
+            category = 1
+        if category is None and effect.get("pixels") is not None:
+            category = 1
+
         payload: dict[str, Any] = {
             "deviceId": self._creds.device_id,
             "payload": {
-                "category": effect.get("category"),
+                "category": category,
                 "mode": effect.get("mode"),
                 "speed": int(effect.get("speed", 0)) if speed is None else int(speed),
                 "brightness": int(brightness),

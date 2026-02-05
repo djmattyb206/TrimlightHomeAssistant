@@ -41,7 +41,7 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         current_mode = current_effect.get("mode")
 
         # Prefer custom preset if currently active
-        if current_category == 2:
+        if current_category in (1, 2):
             presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
             for e in presets:
                 if e.get("id") == effect_id:
