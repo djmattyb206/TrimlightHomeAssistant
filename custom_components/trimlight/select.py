@@ -106,4 +106,35 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
 
         api = self._hass.data[DOMAIN][self._entry_id]["api"]
         await api.run_effect(int(match.get("id")))
+
+        # Optimistic UI update: reflect the selected preset immediately
+        data = self._hass.data[DOMAIN][self._entry_id]
+        brightness = match.get("brightness")
+        speed = match.get("speed")
+        if brightness is not None:
+            data["last_brightness"] = int(brightness)
+        if speed is not None:
+            data["last_speed"] = int(speed)
+
+        current_effect = {
+            "id": match.get("id"),
+            "name": (match.get("name") or "").strip() or "(no name)",
+            "category": 2,
+            "mode": match.get("mode"),
+            "brightness": data.get("last_brightness"),
+            "speed": data.get("last_speed"),
+        }
+
+        existing = self.coordinator.data or {}
+        updated = dict(existing)
+        updated.update(
+            {
+                "current_effect": current_effect,
+                "current_effect_id": current_effect.get("id"),
+                "current_effect_category": 2,
+                "brightness": current_effect.get("brightness"),
+                "switch_state": 1,
+            }
+        )
+        self.coordinator.async_set_updated_data(updated)
         await self.coordinator.async_refresh()
