@@ -49,6 +49,12 @@ class TrimlightLight(TrimlightEntity, LightEntity):
 
         await api.set_switch_state(1)
 
+        # Optimistic UI update: mark on immediately
+        data = self.coordinator.data or {}
+        optimistic = dict(data)
+        optimistic["switch_state"] = 1
+        self.coordinator.async_set_updated_data(optimistic)
+
         if brightness is not None:
             self._hass.data[DOMAIN][self._entry_id]["last_brightness"] = int(brightness)
             await self._apply_brightness(int(brightness))
@@ -58,6 +64,10 @@ class TrimlightLight(TrimlightEntity, LightEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         api = self._hass.data[DOMAIN][self._entry_id]["api"]
         await api.set_switch_state(0)
+        data = self.coordinator.data or {}
+        optimistic = dict(data)
+        optimistic["switch_state"] = 0
+        self.coordinator.async_set_updated_data(optimistic)
         await self.coordinator.async_refresh()
 
     async def _apply_brightness(self, brightness: int) -> None:
