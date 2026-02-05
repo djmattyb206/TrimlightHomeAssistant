@@ -37,6 +37,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         data = self.coordinator.data or {}
+        switch_state = data.get("switch_state")
+        if switch_state is None or int(switch_state) == 0:
+            return None
         if data.get("current_effect_category") != 0:
             return None
         effect_id = data.get("current_effect_id")
@@ -78,6 +81,9 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         data = self.coordinator.data or {}
+        switch_state = data.get("switch_state")
+        if switch_state is None or int(switch_state) == 0:
+            return None
         if data.get("current_effect_category") != 2:
             return None
         effect_id = data.get("current_effect_id")
