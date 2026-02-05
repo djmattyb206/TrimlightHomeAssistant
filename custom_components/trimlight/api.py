@@ -134,13 +134,15 @@ class TrimlightApi:
         }
         return await self._request("POST", "/v1/oauth/resources/device/effect/preview", payload=payload)
 
-    async def preview_effect(self, effect: dict[str, Any], brightness: int) -> dict[str, Any]:
+    async def preview_effect(
+        self, effect: dict[str, Any], brightness: int, speed: int | None = None
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "deviceId": self._creds.device_id,
             "payload": {
                 "category": effect.get("category"),
                 "mode": effect.get("mode"),
-                "speed": effect.get("speed", 0),
+                "speed": int(effect.get("speed", 0)) if speed is None else int(speed),
                 "brightness": int(brightness),
             },
         }

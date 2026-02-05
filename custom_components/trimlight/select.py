@@ -56,7 +56,8 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
 
         api = self._hass.data[DOMAIN][self._entry_id]["api"]
         brightness = self._hass.data[DOMAIN][self._entry_id]["last_brightness"]
-        await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness)
+        speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
+        await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
         await self.coordinator.async_refresh()
 
 

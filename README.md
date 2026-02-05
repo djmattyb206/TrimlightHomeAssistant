@@ -98,6 +98,13 @@ action:
 
 ---
 
+## API Documentation
+
+The Trimlight EDGE API PDF is included here:
+`docs/Trimlight_Edge_API_Documentation 8192022.pdf`
+
+---
+
 ## License
 
 MIT License. See `TrimlightHomeAssistant/LICENSE`.

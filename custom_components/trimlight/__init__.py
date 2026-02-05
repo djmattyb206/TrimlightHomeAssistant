@@ -12,7 +12,7 @@ from .api import TrimlightApi, TrimlightCredentials
 from .const import CONF_DEVICE_ID, DOMAIN, build_builtin_presets_from_effects, build_builtin_presets_static
 from .coordinator import TrimlightCoordinator
 
-PLATFORMS: list[str] = ["light", "select", "button"]
+PLATFORMS: list[str] = ["light", "select", "button", "sensor", "number"]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -37,6 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "custom_cache": stored.get("custom", []),
         "builtins_refreshed": bool(stored.get("builtins")),
         "last_brightness": 255,
+        "last_speed": 100,
         "store": store,
         "debug_path": debug_path,
     }

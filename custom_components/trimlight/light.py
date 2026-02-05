@@ -51,9 +51,7 @@ class TrimlightLight(TrimlightEntity, LightEntity):
 
         if brightness is not None:
             self._hass.data[DOMAIN][self._entry_id]["last_brightness"] = int(brightness)
-            current_effect = (self.coordinator.data or {}).get("current_effect") or {}
-            if current_effect:
-                await api.preview_effect(current_effect, int(brightness))
+            await self._apply_brightness(int(brightness))
 
         await self.coordinator.async_refresh()
 
@@ -61,3 +59,31 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         api = self._hass.data[DOMAIN][self._entry_id]["api"]
         await api.set_switch_state(0)
         await self.coordinator.async_refresh()
+
+    async def _apply_brightness(self, brightness: int) -> None:
+        data = self.coordinator.data or {}
+        api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        last_speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
+
+        current_effect = data.get("current_effect") or {}
+        if current_effect:
+            await api.preview_effect(current_effect, brightness, speed=last_speed)
+            return
+
+        effect_id = data.get("current_effect_id")
+        category = data.get("current_effect_category")
+        if effect_id is None or category is None:
+            return
+
+        if category == 2:
+            presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+            match = next((e for e in presets if e.get("id") == effect_id), None)
+            if match:
+                await api.preview_effect(match, brightness, speed=last_speed)
+            return
+
+        if category == 0:
+            builtins = self._hass.data[DOMAIN][self._entry_id].get("builtins", [])
+            match = next((b for b in builtins if b.get("id") == effect_id or b.get("mode") == effect_id), None)
+            if match:
+                await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=last_speed)
