@@ -3,7 +3,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, VERIFY_REFRESH_DELAY_SECONDS
 from .coordinator import TrimlightCoordinator
 
 
@@ -27,3 +27,16 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
             "manufacturer": "Trimlight",
             "model": "EDGE",
         }
+
+    def _schedule_verification_refresh(self) -> None:
+        data = self._hass.data[DOMAIN][self._entry_id]
+        handle = data.get("verify_refresh_handle")
+        if handle:
+            handle.cancel()
+
+        def _refresh() -> None:
+            self._hass.async_create_task(self.coordinator.async_refresh())
+
+        data["verify_refresh_handle"] = self._hass.loop.call_later(
+            VERIFY_REFRESH_DELAY_SECONDS, _refresh
+        )

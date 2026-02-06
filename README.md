@@ -208,12 +208,13 @@ action:
 
 ## Notes and Troubleshooting
 
+- Verification refresh happens 5 seconds after each command (`VERIFY_REFRESH_DELAY_SECONDS`).
 - If you don’t see custom presets, press the refresh button and check the debug cache file in your HA config folder.
 - If built-in presets are empty on first load, the integration will fall back to the static built‑in list.
 - API credentials are required for every call; a bad key or secret will cause setup failures.
 - If the current preset shows `Unknown`, select a preset once so it can be cached.
-- Polling interval is 15 seconds (`DEFAULT_POLL_INTERVAL_SECONDS`).
-- UI uses a 20-second on grace window after preset selection to avoid flicker (`FORCED_ON_GRACE_SECONDS`).
+- Polling interval is 10 minutes (`DEFAULT_POLL_INTERVAL_SECONDS`).
+- UI uses a 20-second on grace window after actions to avoid flicker (`FORCED_ON_GRACE_SECONDS`).
 
 ---
 

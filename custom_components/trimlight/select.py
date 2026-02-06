@@ -95,7 +95,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         updated = dict(self.coordinator.data or {})
         updated["switch_state"] = 1
         self.coordinator.async_set_updated_data(updated)
-        await self.coordinator.async_refresh()
+        self._schedule_verification_refresh()
 
 
 class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
@@ -198,7 +198,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             }
         )
         self.coordinator.async_set_updated_data(updated)
-        await self.coordinator.async_refresh()
+        self._schedule_verification_refresh()
 
 
 class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
@@ -295,4 +295,4 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
             }
         )
         self.coordinator.async_set_updated_data(updated)
-        await self.coordinator.async_refresh()
+        self._schedule_verification_refresh()

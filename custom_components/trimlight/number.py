@@ -91,4 +91,4 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
                         reverse=reverse,
                     )
 
-        await self.coordinator.async_refresh()
+        self._schedule_verification_refresh()

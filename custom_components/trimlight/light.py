@@ -37,9 +37,14 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         if int(switch_state) != 0:
             # Clear any grace window once the device reports on.
             self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = None
+            forced_off_until = self._hass.data[DOMAIN][self._entry_id].get("forced_off_until")
+            if forced_off_until is not None and time.monotonic() < forced_off_until:
+                return False
             return True
-        forced_until = self._hass.data[DOMAIN][self._entry_id].get("forced_on_until")
-        if forced_until is not None and time.monotonic() < forced_until:
+        # Device reports off: clear forced-off grace window
+        self._hass.data[DOMAIN][self._entry_id]["forced_off_until"] = None
+        forced_on_until = self._hass.data[DOMAIN][self._entry_id].get("forced_on_until")
+        if forced_on_until is not None and time.monotonic() < forced_on_until:
             return True
         return False
 
@@ -62,12 +67,17 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         optimistic = dict(data)
         optimistic["switch_state"] = 1
         self.coordinator.async_set_updated_data(optimistic)
+        # Grace window to keep UI on while controller catches up
+        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = (
+            time.monotonic() + FORCED_ON_GRACE_SECONDS
+        )
+        self._hass.data[DOMAIN][self._entry_id]["forced_off_until"] = None
 
         if brightness is not None:
             self._hass.data[DOMAIN][self._entry_id]["last_brightness"] = int(brightness)
             await self._apply_brightness(int(brightness))
 
-        await self.coordinator.async_refresh()
+        self._schedule_verification_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         api = self._hass.data[DOMAIN][self._entry_id]["api"]
@@ -79,11 +89,16 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         optimistic["current_effect_id"] = None
         optimistic["current_effect_category"] = None
         self.coordinator.async_set_updated_data(optimistic)
+        # Grace window to keep UI off while controller catches up
+        self._hass.data[DOMAIN][self._entry_id]["forced_off_until"] = (
+            time.monotonic() + FORCED_ON_GRACE_SECONDS
+        )
+        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = None
         # Clear last-selected preset context when lights turn off
         self._hass.data[DOMAIN][self._entry_id]["last_selected_preset"] = None
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_preset"] = None
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = None
-        await self.coordinator.async_refresh()
+        self._schedule_verification_refresh()
 
     async def _apply_brightness(self, brightness: int) -> None:
         data = self.coordinator.data or {}
