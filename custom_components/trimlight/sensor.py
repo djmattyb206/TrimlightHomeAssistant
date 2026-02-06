@@ -93,3 +93,19 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
             return last_known
 
         return "Unknown"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self.coordinator.data or {}
+        current_effect = data.get("current_effect") or {}
+        mode = current_effect.get("mode")
+        if mode is None:
+            for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
+                if current_effect.get(key) is not None:
+                    mode = current_effect.get(key)
+                    break
+        return {
+            "current_effect_id": data.get("current_effect_id"),
+            "current_effect_category": data.get("current_effect_category"),
+            "current_effect_mode": mode,
+        }
