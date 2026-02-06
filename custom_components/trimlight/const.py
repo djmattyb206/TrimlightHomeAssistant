@@ -224,7 +224,10 @@ CUSTOM_EFFECT_MODES = {
     11: "Wave Forward",
     12: "Wave Backward",
     13: "Wave Middle To Out",
-    14: "Wave Out To Middle",
+    14: "Wave Out To Middle/Inside Out",
     15: "Strobe",
     16: "Solid Fade",
+    17: "Full Strobe",
+    18: "Twinkle",
+    19: "Firework"
 }
