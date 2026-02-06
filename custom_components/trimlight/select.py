@@ -64,6 +64,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         for row in builtins:
             if row.get("id") == effect_id or row.get("mode") == effect_id:
                 return row["name"]
+        last_known = self._hass.data[DOMAIN][self._entry_id].get("last_known_builtin_preset")
+        if last_known:
+            return last_known
         return None
 
     async def async_select_option(self, option: str) -> None:
@@ -88,6 +91,8 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
 
         # Track last selected preset for sensor fallback
         self._hass.data[DOMAIN][self._entry_id]["last_selected_preset"] = match.get("name")
+        self._hass.data[DOMAIN][self._entry_id]["last_known_preset"] = match.get("name")
+        self._hass.data[DOMAIN][self._entry_id]["last_known_builtin_preset"] = match.get("name")
         # Clear custom selection context when a built-in is chosen
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_preset"] = None
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = None
@@ -134,6 +139,9 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         last_selected = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_preset")
         if last_selected:
             return last_selected
+        last_known = self._hass.data[DOMAIN][self._entry_id].get("last_known_custom_preset")
+        if last_known:
+            return last_known
         return None
 
     async def async_select_option(self, option: str) -> None:
@@ -167,6 +175,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         selected_name = (match.get("name") or "").strip() or "(no name)"
         data["last_selected_preset"] = selected_name
         data["last_selected_custom_preset"] = selected_name
+        data["last_known_preset"] = selected_name
+        data["last_known_custom_preset"] = selected_name
         mode = _get_effect_mode(match)
         if mode is not None:
             data["last_selected_custom_mode"] = mode
