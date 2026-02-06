@@ -39,7 +39,12 @@ class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         break
         custom_effects.sort(key=lambda e: e.get("id", 9999))
 
-        current_effect = payload.get("currentEffect") or {}
+        current_effect = dict(payload.get("currentEffect") or {})
+        if current_effect.get("mode") is None:
+            for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
+                if current_effect.get(key) is not None:
+                    current_effect["mode"] = current_effect.get(key)
+                    break
         current_effect_id = current_effect.get("id")
         current_category = current_effect.get("category")
         brightness = current_effect.get("brightness")

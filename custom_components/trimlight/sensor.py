@@ -108,4 +108,9 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
             "current_effect_id": data.get("current_effect_id"),
             "current_effect_category": data.get("current_effect_category"),
             "current_effect_mode": mode,
+            "current_effect_speed": current_effect.get("speed"),
+            "current_effect_brightness": current_effect.get("brightness"),
+            "current_effect_pixel_len": current_effect.get("pixelLen"),
+            "current_effect_reverse": current_effect.get("reverse"),
+            "current_effect_pixels": current_effect.get("pixels"),
         }

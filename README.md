@@ -170,13 +170,23 @@ Use `select.trimlight_custom_preset`.
 
 ### Custom Effect Modes
 Use `select.trimlight_custom_effect_mode`.
-- Choose a mode (0–16) by name (camel case).
+- Choose a mode by name. The list includes all known modes (0-19).
 - Applied to the currently active custom effect.
+- If the controller reports a mode not in the list, use the `sensor.trimlight_current_preset` attribute `current_effect_mode` to map and name it.
 
 ### Current Preset Sensor
 `sensor.trimlight_current_preset` shows the active preset name.
-- Uses the API’s `currentEffect` when available.
+- Uses the API's `currentEffect` when available.
 - Falls back to the last selected preset if needed.
+- Attributes (from API effect fields):
+  - `current_effect_id`: integer ID of saved effect. `-1` means preview (not yet saved).
+  - `current_effect_category`: integer. `0` = built-in effect, `1` = custom effect.
+  - `current_effect_mode`: integer. Built-in mode range `0-179`; custom mode range `0-19` (documented).
+  - `current_effect_speed`: integer `0-255`.
+  - `current_effect_brightness`: integer `0-255`.
+  - `current_effect_pixel_len`: integer `1-90` (only required for built-in effects).
+  - `current_effect_reverse`: boolean (only required for built-in effects).
+  - `current_effect_pixels`: list of pixels for custom effects. Each entry includes `index`, `count`, `color` (RGB int), `disable` (bool).
 
 ### Refresh Preset Lists
 Press `button.trimlight_refresh_presets`.
