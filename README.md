@@ -25,6 +25,8 @@ Entities created:
 - `number.trimlight_effect_speed` (speed slider, 0–100%)
 - `sensor.trimlight_current_preset` (current preset name)
 - `button.trimlight_refresh_presets` (refresh presets lists)
+- `sensor.trimlight_current_preset` exposes effect detail attributes (mode/speed/brightness/pixels)
+- Select entities expose ID/lookup attributes for preset tracking
 
 Presets are cached in Home Assistant storage so they persist after restarts. A human-readable cache file is also written to your HA config folder as `trimlight_presets_<entry_id>.json`.
 
@@ -174,6 +176,12 @@ Use `select.trimlight_custom_effect_mode`.
 - Applied to the currently active custom effect.
 - If the controller reports a mode not in the list, use the `sensor.trimlight_current_preset` attribute `current_effect_mode` to map and name it.
 
+### Select Entity Attributes
+The select entities expose extra attributes for IDs and lookup:
+- `select.trimlight_custom_preset`: `current_id`, `presets` (list of `{id,name}`), `name_to_id` (unique names only).
+- `select.trimlight_built_in_preset`: `current_id`, `builtins` (list of `{id,mode,name}`).
+- `select.trimlight_custom_effect_mode`: `current_mode_id`, `modes` (list of `{id,name}`).
+
 ### Current Preset Sensor
 `sensor.trimlight_current_preset` shows the active preset name.
 - Uses the API's `currentEffect` when available.
@@ -187,6 +195,7 @@ Use `select.trimlight_custom_effect_mode`.
   - `current_effect_pixel_len`: integer `1-90` (only required for built-in effects).
   - `current_effect_reverse`: boolean (only required for built-in effects).
   - `current_effect_pixels`: list of pixels for custom effects. Each entry includes `index`, `count`, `color` (RGB int), `disable` (bool).
+  - If `current_effect_pixels` is empty/disabled, the integration falls back to last known custom pixels.
 
 ### Refresh Preset Lists
 Press `button.trimlight_refresh_presets`.

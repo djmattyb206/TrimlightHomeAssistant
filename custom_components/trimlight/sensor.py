@@ -104,6 +104,18 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
                 if current_effect.get(key) is not None:
                     mode = current_effect.get(key)
                     break
+
+        pixels = current_effect.get("pixels")
+        if not pixels:
+            pixels = self._hass.data[DOMAIN][self._entry_id].get("last_known_custom_pixels")
+        else:
+            # If controller returns an empty/disabled pixel map, fall back to last known pixels.
+            has_data = any(
+                (p.get("count", 0) or 0) > 0 or (p.get("color", 0) or 0) != 0 for p in pixels
+            )
+            if not has_data:
+                pixels = self._hass.data[DOMAIN][self._entry_id].get("last_known_custom_pixels") or pixels
+
         return {
             "current_effect_id": data.get("current_effect_id"),
             "current_effect_category": data.get("current_effect_category"),
@@ -112,5 +124,5 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
             "current_effect_brightness": current_effect.get("brightness"),
             "current_effect_pixel_len": current_effect.get("pixelLen"),
             "current_effect_reverse": current_effect.get("reverse"),
-            "current_effect_pixels": current_effect.get("pixels"),
+            "current_effect_pixels": pixels,
         }

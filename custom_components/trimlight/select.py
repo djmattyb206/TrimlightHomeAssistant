@@ -216,6 +216,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         data["last_selected_custom_preset"] = selected_name
         data["last_known_preset"] = selected_name
         data["last_known_custom_preset"] = selected_name
+        if match.get("pixels") is not None:
+            data["last_known_custom_pixels"] = match.get("pixels")
         mode = _get_effect_mode(match)
         if mode is not None:
             data["last_selected_custom_mode"] = mode
@@ -233,6 +235,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             "mode": _get_effect_mode(match),
             "brightness": data.get("last_brightness"),
             "speed": data.get("last_speed"),
+            "pixels": match.get("pixels"),
         }
 
         existing = self.coordinator.data or {}
