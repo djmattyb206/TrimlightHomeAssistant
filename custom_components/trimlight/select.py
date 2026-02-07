@@ -69,6 +69,16 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             return last_known
         return None
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self.coordinator.data or {}
+        effect_id = data.get("current_effect_id")
+        builtins = self._hass.data[DOMAIN][self._entry_id].get("builtins", [])
+        return {
+            "current_id": effect_id,
+            "builtins": [{"id": b.get("id"), "mode": b.get("mode"), "name": b.get("name")} for b in builtins],
+        }
+
     async def async_select_option(self, option: str) -> None:
         builtins = self._hass.data[DOMAIN][self._entry_id]["builtins"]
         match = next((row for row in builtins if row["name"] == option), None)
@@ -115,7 +125,14 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         presets = (self.coordinator.data or {}).get("custom_effects") or self._hass.data[DOMAIN][
             self._entry_id
         ].get("custom_cache", [])
-        return [(e.get("name") or "").strip() or "(no name)" for e in presets]
+        names = [(e.get("name") or "").strip() or "(no name)" for e in presets]
+
+        def _sort_key(name: str) -> tuple[int, str]:
+            if name == "(no name)":
+                return (1, "")
+            return (0, name.lower())
+
+        return sorted(names, key=_sort_key)
 
     @property
     def current_option(self) -> str | None:
@@ -143,6 +160,28 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         if last_known:
             return last_known
         return None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self.coordinator.data or {}
+        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+        presets_list = [{"id": e.get("id"), "name": (e.get("name") or "").strip() or "(no name)"} for e in presets]
+        name_to_id: dict[str, int] = {}
+        duplicates: set[str] = set()
+        for item in presets_list:
+            name = item["name"]
+            if name in name_to_id:
+                duplicates.add(name)
+            else:
+                name_to_id[name] = item["id"]
+        for dup in duplicates:
+            name_to_id.pop(dup, None)
+
+        return {
+            "current_id": data.get("current_effect_id"),
+            "presets": presets_list,
+            "name_to_id": name_to_id,
+        }
 
     async def async_select_option(self, option: str) -> None:
         presets = (self.coordinator.data or {}).get("custom_effects") or self._hass.data[DOMAIN][
@@ -253,6 +292,15 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
 
         self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = int(mode)
         return CUSTOM_EFFECT_MODES.get(int(mode), str(mode))
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self.coordinator.data or {}
+        current = (data.get("current_effect") or {}).get("mode")
+        if current is None:
+            current = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_mode")
+        modes = [{"id": k, "name": v} for k, v in sorted(CUSTOM_EFFECT_MODES.items())]
+        return {"current_mode_id": current, "modes": modes}
 
     async def async_select_option(self, option: str) -> None:
         data = self._hass.data[DOMAIN][self._entry_id]
