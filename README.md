@@ -51,7 +51,7 @@ These come from your Trimlight EDGE account / device and can be obtained using t
 
 ## How to Use the Features
 
-Sample Setup
+### Sample Setup
 <img width="396" height="793" alt="image" src="https://github.com/user-attachments/assets/03bf127f-2e1a-4e22-aad9-ed26a4a3ae27" />
 
 ## Cards You Can Paste
