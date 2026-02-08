@@ -240,7 +240,7 @@ action:
 ## API Documentation
 
 The Trimlight EDGE API PDF is included here:
-`docs/Trimlight_Edge_API_Documentation 8192022.pdf`
+[Trimlight Edge API Documentation (PDF)](https://github.com/djmattyb206/TrimlightHomeAssistant/blob/main/docs/Trimlight_Edge_API_Documentation%208192022.pdf)
 
 ---
 
