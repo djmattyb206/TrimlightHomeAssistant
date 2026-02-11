@@ -51,6 +51,9 @@ These come from your Trimlight EDGE account / device and can be obtained using t
 
 ## How to Use the Features
 
+### Sample Setup
+<img width="396" height="793" alt="image" src="https://github.com/user-attachments/assets/03bf127f-2e1a-4e22-aad9-ed26a4a3ae27" />
+
 ## Cards You Can Paste
 
 Prerequisite: Install Mushroom cards (HACS -> Frontend -> Mushroom).
@@ -240,7 +243,7 @@ action:
 ## API Documentation
 
 The Trimlight EDGE API PDF is included here:
-`docs/Trimlight_Edge_API_Documentation 8192022.pdf`
+[Trimlight Edge API Documentation (PDF)](https://github.com/djmattyb206/TrimlightHomeAssistant/blob/main/docs/Trimlight_Edge_API_Documentation%208192022.pdf)
 
 ---
 
