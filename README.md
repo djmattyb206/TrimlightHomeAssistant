@@ -244,6 +244,15 @@ The Trimlight EDGE API PDF is included here:
 
 ---
 
+## Developer Notes
+
+- Runtime state is stored in `custom_components/trimlight/data.py` as `TrimlightData`.
+- Effect normalization and lookups live in `custom_components/trimlight/effects.py`, and preview updates in `custom_components/trimlight/controller.py`.
+- Built-in animation names live in `custom_components/trimlight/presets.py`.
+- Preset cache persistence and debug file writes live in `custom_components/trimlight/storage.py`.
+
+---
+
 ## License
 
 MIT License. See `TrimlightHomeAssistant/LICENSE`.

@@ -5,15 +5,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .data import get_data
 from .entity import TrimlightEntity
+from .effects import get_effect_mode
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
+    data = get_data(hass, entry.entry_id)
+    coordinator = data.coordinator
     async_add_entities([TrimlightCurrentPresetSensor(hass, entry.entry_id, coordinator)])
 
 
@@ -38,10 +39,11 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
 
         effect_id = data.get("current_effect_id")
         current_category = data.get("current_effect_category")
-        current_mode = current_effect.get("mode")
+        current_mode = get_effect_mode(current_effect)
 
-        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
-        builtins = self._hass.data[DOMAIN][self._entry_id].get("builtins", [])
+        runtime = self._data
+        presets = (data.get("custom_effects") or runtime.custom_cache)
+        builtins = runtime.builtins
 
         # Prefer custom preset if currently active (category 1/2)
         if current_category in (1, 2):
@@ -84,11 +86,11 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         if _valid_state(builtin_state.state if builtin_state else None):
             return builtin_state.state
 
-        last_selected = self._hass.data[DOMAIN][self._entry_id].get("last_selected_preset")
+        last_selected = runtime.last_selected_preset
         if _valid_state(last_selected):
             return last_selected
 
-        last_known = self._hass.data[DOMAIN][self._entry_id].get("last_known_preset")
+        last_known = runtime.last_known_preset
         if _valid_state(last_known):
             return last_known
 
@@ -98,23 +100,18 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data or {}
         current_effect = data.get("current_effect") or {}
-        mode = current_effect.get("mode")
-        if mode is None:
-            for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
-                if current_effect.get(key) is not None:
-                    mode = current_effect.get(key)
-                    break
+        mode = get_effect_mode(current_effect)
 
         pixels = current_effect.get("pixels")
         if not pixels:
-            pixels = self._hass.data[DOMAIN][self._entry_id].get("last_known_custom_pixels")
+            pixels = self._data.last_known_custom_pixels
         else:
             # If controller returns an empty/disabled pixel map, fall back to last known pixels.
             has_data = any(
                 (p.get("count", 0) or 0) > 0 or (p.get("color", 0) or 0) != 0 for p in pixels
             )
             if not has_data:
-                pixels = self._hass.data[DOMAIN][self._entry_id].get("last_known_custom_pixels") or pixels
+                pixels = self._data.last_known_custom_pixels or pixels
 
         return {
             "current_effect_id": data.get("current_effect_id"),

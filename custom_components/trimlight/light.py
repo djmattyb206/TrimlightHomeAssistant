@@ -8,15 +8,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, FORCED_ON_GRACE_SECONDS
+from .const import FORCED_ON_GRACE_SECONDS
+from .controller import apply_effect_update
+from .data import get_data
 from .entity import TrimlightEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
+    data = get_data(hass, entry.entry_id)
+    coordinator = data.coordinator
     async_add_entities([TrimlightLight(hass, entry.entry_id, coordinator)])
 
 
@@ -36,14 +38,16 @@ class TrimlightLight(TrimlightEntity, LightEntity):
             return None
         if int(switch_state) != 0:
             # Clear any grace window once the device reports on.
-            self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = None
-            forced_off_until = self._hass.data[DOMAIN][self._entry_id].get("forced_off_until")
+            data = self._data
+            data.forced_on_until = None
+            forced_off_until = data.forced_off_until
             if forced_off_until is not None and time.monotonic() < forced_off_until:
                 return False
             return True
         # Device reports off: clear forced-off grace window
-        self._hass.data[DOMAIN][self._entry_id]["forced_off_until"] = None
-        forced_on_until = self._hass.data[DOMAIN][self._entry_id].get("forced_on_until")
+        data = self._data
+        data.forced_off_until = None
+        forced_on_until = data.forced_on_until
         if forced_on_until is not None and time.monotonic() < forced_on_until:
             return True
         return False
@@ -53,105 +57,49 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         data = self.coordinator.data or {}
         brightness = data.get("brightness")
         if brightness is None:
-            return self._hass.data[DOMAIN][self._entry_id]["last_brightness"]
+            return self._data.last_brightness
         return int(brightness)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        data = self._data
+        api = data.api
         brightness = kwargs.get(ATTR_BRIGHTNESS)
 
         await api.set_switch_state(1)
 
         # Optimistic UI update: mark on immediately
-        data = self.coordinator.data or {}
-        optimistic = dict(data)
+        coord_data = self.coordinator.data or {}
+        optimistic = dict(coord_data)
         optimistic["switch_state"] = 1
         self.coordinator.async_set_updated_data(optimistic)
         # Grace window to keep UI on while controller catches up
-        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = (
-            time.monotonic() + FORCED_ON_GRACE_SECONDS
-        )
-        self._hass.data[DOMAIN][self._entry_id]["forced_off_until"] = None
+        data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
+        data.forced_off_until = None
 
         if brightness is not None:
-            self._hass.data[DOMAIN][self._entry_id]["last_brightness"] = int(brightness)
-            await self._apply_brightness(int(brightness))
+            data.last_brightness = int(brightness)
+            await apply_effect_update(
+                api, data, self.coordinator.data or {}, brightness=int(brightness)
+            )
 
         self._schedule_verification_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        data = self._data
+        api = data.api
         await api.set_switch_state(0)
-        data = self.coordinator.data or {}
-        optimistic = dict(data)
+        coord_data = self.coordinator.data or {}
+        optimistic = dict(coord_data)
         optimistic["switch_state"] = 0
         optimistic["current_effect"] = {}
         optimistic["current_effect_id"] = None
         optimistic["current_effect_category"] = None
         self.coordinator.async_set_updated_data(optimistic)
         # Grace window to keep UI off while controller catches up
-        self._hass.data[DOMAIN][self._entry_id]["forced_off_until"] = (
-            time.monotonic() + FORCED_ON_GRACE_SECONDS
-        )
-        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = None
+        data.forced_off_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
+        data.forced_on_until = None
         # Clear last-selected preset context when lights turn off
-        self._hass.data[DOMAIN][self._entry_id]["last_selected_preset"] = None
-        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_preset"] = None
-        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = None
+        data.last_selected_preset = None
+        data.last_selected_custom_preset = None
+        data.last_selected_custom_mode = None
         self._schedule_verification_refresh()
-
-    async def _apply_brightness(self, brightness: int) -> None:
-        data = self.coordinator.data or {}
-        api = self._hass.data[DOMAIN][self._entry_id]["api"]
-        last_speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
-
-        current_effect = data.get("current_effect") or {}
-        if current_effect:
-            await api.preview_effect(current_effect, brightness, speed=last_speed)
-            return
-
-        effect_id = data.get("current_effect_id")
-        category = data.get("current_effect_category")
-        if effect_id is None or category is None:
-            return
-
-        if category in (1, 2):
-            presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
-            match = next((e for e in presets if e.get("id") == effect_id), None)
-            if match:
-                await api.preview_effect(match, brightness, speed=last_speed)
-            return
-
-        if category == 0:
-            builtins = self._hass.data[DOMAIN][self._entry_id].get("builtins", [])
-            match = next((b for b in builtins if b.get("id") == effect_id or b.get("mode") == effect_id), None)
-            if match:
-                pixel_len = None
-                reverse = None
-                if current_effect and current_effect.get("category") == 0:
-                    pixel_len = current_effect.get("pixelLen")
-                    reverse = current_effect.get("reverse")
-
-                if pixel_len is None or reverse is None:
-                    effects = (data.get("effects") or [])
-                    for e in effects:
-                        if e.get("category") == 0 and (
-                            e.get("id") == effect_id
-                            or e.get("mode") == effect_id
-                            or e.get("mode") == current_effect.get("mode")
-                        ):
-                            if pixel_len is None:
-                                pixel_len = e.get("pixelLen")
-                            if reverse is None:
-                                reverse = e.get("reverse")
-
-                pixel_len = 30 if pixel_len is None else int(pixel_len)
-                reverse = False if reverse is None else bool(reverse)
-
-                await api.preview_builtin(
-                    match.get("mode", match.get("id")),
-                    brightness=brightness,
-                    speed=last_speed,
-                    pixel_len=pixel_len,
-                    reverse=reverse,
-                )

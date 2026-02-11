@@ -9,6 +9,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import TrimlightApi
 from .const import DEFAULT_POLL_INTERVAL_SECONDS
+from .effects import normalize_custom_effects, normalize_effect_mode
 
 
 class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -30,21 +31,10 @@ class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         payload = (data.get("payload") or {}) if isinstance(data, dict) else {}
         effects = (payload.get("effects") or []) if isinstance(payload, dict) else []
-        custom_effects = [e for e in effects if e.get("category") == 2]
-        for effect in custom_effects:
-            if effect.get("mode") is None:
-                for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
-                    if effect.get(key) is not None:
-                        effect["mode"] = effect.get(key)
-                        break
-        custom_effects.sort(key=lambda e: e.get("id", 9999))
+        custom_effects = normalize_custom_effects(effects)
 
         current_effect = dict(payload.get("currentEffect") or {})
-        if current_effect.get("mode") is None:
-            for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
-                if current_effect.get(key) is not None:
-                    current_effect["mode"] = current_effect.get(key)
-                    break
+        normalize_effect_mode(current_effect)
         current_effect_id = current_effect.get("id")
         current_category = current_effect.get("category")
         brightness = current_effect.get("brightness")

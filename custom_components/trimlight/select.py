@@ -7,15 +7,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CUSTOM_EFFECT_MODES, DOMAIN, FORCED_ON_GRACE_SECONDS
+from .const import CUSTOM_EFFECT_MODES, FORCED_ON_GRACE_SECONDS
+from .data import get_data
 from .entity import TrimlightEntity
+from .effects import get_effect_mode
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
-    data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = data["coordinator"]
+    data = get_data(hass, entry.entry_id)
+    coordinator = data.coordinator
     async_add_entities(
         [
             TrimlightBuiltInSelect(hass, entry.entry_id, coordinator),
@@ -23,18 +25,6 @@ async def async_setup_entry(
             TrimlightCustomModeSelect(hass, entry.entry_id, coordinator),
         ]
     )
-
-
-def _get_effect_mode(effect: dict | None) -> int | None:
-    if not effect:
-        return None
-    mode = effect.get("mode")
-    if mode is not None:
-        return int(mode)
-    for key in ("effectMode", "effect_mode", "effect_mode_id", "modeId"):
-        if effect.get(key) is not None:
-            return int(effect.get(key))
-    return None
 
 
 class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
@@ -46,7 +36,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
 
     @property
     def options(self) -> list[str]:
-        builtins = self._hass.data[DOMAIN][self._entry_id]["builtins"]
+        builtins = self._data.builtins
         return [row["name"] for row in builtins]
 
     @property
@@ -60,11 +50,11 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         effect_id = data.get("current_effect_id")
         if effect_id is None:
             return None
-        builtins = self._hass.data[DOMAIN][self._entry_id]["builtins"]
+        builtins = self._data.builtins
         for row in builtins:
             if row.get("id") == effect_id or row.get("mode") == effect_id:
                 return row["name"]
-        last_known = self._hass.data[DOMAIN][self._entry_id].get("last_known_builtin_preset")
+        last_known = self._data.last_known_builtin_preset
         if last_known:
             return last_known
         return None
@@ -73,39 +63,38 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data or {}
         effect_id = data.get("current_effect_id")
-        builtins = self._hass.data[DOMAIN][self._entry_id].get("builtins", [])
+        builtins = self._data.builtins
         return {
             "current_id": effect_id,
             "builtins": [{"id": b.get("id"), "mode": b.get("mode"), "name": b.get("name")} for b in builtins],
         }
 
     async def async_select_option(self, option: str) -> None:
-        builtins = self._hass.data[DOMAIN][self._entry_id]["builtins"]
+        data = self._data
+        builtins = data.builtins
         match = next((row for row in builtins if row["name"] == option), None)
         if not match:
             return
 
-        api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        api = data.api
         # Ensure the lights are on when a preset is selected.
         try:
             await api.set_switch_state(1)
         except Exception:
             pass
         # Keep UI on for a short grace window while the controller catches up.
-        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = (
-            time.monotonic() + FORCED_ON_GRACE_SECONDS
-        )
-        brightness = self._hass.data[DOMAIN][self._entry_id]["last_brightness"]
-        speed = self._hass.data[DOMAIN][self._entry_id]["last_speed"]
+        data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
+        brightness = data.last_brightness
+        speed = data.last_speed
         await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
 
         # Track last selected preset for sensor fallback
-        self._hass.data[DOMAIN][self._entry_id]["last_selected_preset"] = match.get("name")
-        self._hass.data[DOMAIN][self._entry_id]["last_known_preset"] = match.get("name")
-        self._hass.data[DOMAIN][self._entry_id]["last_known_builtin_preset"] = match.get("name")
+        data.last_selected_preset = match.get("name")
+        data.last_known_preset = match.get("name")
+        data.last_known_builtin_preset = match.get("name")
         # Clear custom selection context when a built-in is chosen
-        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_preset"] = None
-        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = None
+        data.last_selected_custom_preset = None
+        data.last_selected_custom_mode = None
         # Optimistic UI update for on/off state
         updated = dict(self.coordinator.data or {})
         updated["switch_state"] = 1
@@ -122,9 +111,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
 
     @property
     def options(self) -> list[str]:
-        presets = (self.coordinator.data or {}).get("custom_effects") or self._hass.data[DOMAIN][
-            self._entry_id
-        ].get("custom_cache", [])
+        data = self._data
+        presets = (self.coordinator.data or {}).get("custom_effects") or data.custom_cache
         names = [(e.get("name") or "").strip() or "(no name)" for e in presets]
 
         def _sort_key(name: str) -> tuple[int, str]:
@@ -145,7 +133,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             return None
         effect_id = data.get("current_effect_id")
 
-        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+        runtime = self._data
+        presets = (data.get("custom_effects") or runtime.custom_cache)
         if effect_id is not None:
             for e in presets:
                 if e.get("id") == effect_id:
@@ -153,10 +142,10 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
 
         # If the device reports a preview (id = -1) or no match, fall back
         # to the last selected preset while the lights are on.
-        last_selected = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_preset")
+        last_selected = runtime.last_selected_custom_preset
         if last_selected:
             return last_selected
-        last_known = self._hass.data[DOMAIN][self._entry_id].get("last_known_custom_preset")
+        last_known = runtime.last_known_custom_preset
         if last_known:
             return last_known
         return None
@@ -164,7 +153,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data or {}
-        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+        presets = (data.get("custom_effects") or self._data.custom_cache)
         presets_list = [{"id": e.get("id"), "name": (e.get("name") or "").strip() or "(no name)"} for e in presets]
         name_to_id: dict[str, int] = {}
         duplicates: set[str] = set()
@@ -184,9 +173,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         }
 
     async def async_select_option(self, option: str) -> None:
-        presets = (self.coordinator.data or {}).get("custom_effects") or self._hass.data[DOMAIN][
-            self._entry_id
-        ].get("custom_cache", [])
+        data = self._data
+        presets = (self.coordinator.data or {}).get("custom_effects") or data.custom_cache
         match = None
         for e in presets:
             name = (e.get("name") or "").strip() or "(no name)"
@@ -197,44 +185,41 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         if not match:
             return
 
-        api = self._hass.data[DOMAIN][self._entry_id]["api"]
+        api = data.api
         # Ensure the lights are on when a preset is selected.
         try:
             await api.set_switch_state(1)
         except Exception:
             pass
         # Keep UI on for a short grace window while the controller catches up.
-        self._hass.data[DOMAIN][self._entry_id]["forced_on_until"] = (
-            time.monotonic() + FORCED_ON_GRACE_SECONDS
-        )
+        data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
         await api.run_effect(int(match.get("id")))
 
         # Optimistic UI update: reflect the selected preset immediately
-        data = self._hass.data[DOMAIN][self._entry_id]
         selected_name = (match.get("name") or "").strip() or "(no name)"
-        data["last_selected_preset"] = selected_name
-        data["last_selected_custom_preset"] = selected_name
-        data["last_known_preset"] = selected_name
-        data["last_known_custom_preset"] = selected_name
+        data.last_selected_preset = selected_name
+        data.last_selected_custom_preset = selected_name
+        data.last_known_preset = selected_name
+        data.last_known_custom_preset = selected_name
         if match.get("pixels") is not None:
-            data["last_known_custom_pixels"] = match.get("pixels")
-        mode = _get_effect_mode(match)
+            data.last_known_custom_pixels = match.get("pixels")
+        mode = get_effect_mode(match)
         if mode is not None:
-            data["last_selected_custom_mode"] = mode
+            data.last_selected_custom_mode = mode
         brightness = match.get("brightness")
         speed = match.get("speed")
         if brightness is not None:
-            data["last_brightness"] = int(brightness)
+            data.last_brightness = int(brightness)
         if speed is not None:
-            data["last_speed"] = int(speed)
+            data.last_speed = int(speed)
 
         current_effect = {
             "id": match.get("id"),
             "name": (match.get("name") or "").strip() or "(no name)",
             "category": 2,
-            "mode": _get_effect_mode(match),
-            "brightness": data.get("last_brightness"),
-            "speed": data.get("last_speed"),
+            "mode": get_effect_mode(match),
+            "brightness": data.last_brightness,
+            "speed": data.last_speed,
             "pixels": match.get("pixels"),
         }
 
@@ -270,45 +255,46 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         switch_state = data.get("switch_state")
         if switch_state is None or int(switch_state) == 0:
             return None
-        presets = (data.get("custom_effects") or self._hass.data[DOMAIN][self._entry_id].get("custom_cache", []))
+        runtime = self._data
+        presets = (data.get("custom_effects") or runtime.custom_cache)
         custom_ids = {e.get("id") for e in presets}
 
         current_category = data.get("current_effect_category")
         effect_id = data.get("current_effect_id")
-        last_custom = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_preset")
-        last_mode = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_mode")
+        last_custom = runtime.last_selected_custom_preset
+        last_mode = runtime.last_selected_custom_mode
 
         is_custom = current_category in (1, 2) or (effect_id in custom_ids) or bool(last_custom)
         if not is_custom:
             return None
 
-        mode = (data.get("current_effect") or {}).get("mode")
+        mode = get_effect_mode(data.get("current_effect") or {})
         if mode is None and effect_id in custom_ids:
             match = next((e for e in presets if e.get("id") == effect_id), None)
             if match:
-                mode = _get_effect_mode(match)
+                mode = get_effect_mode(match)
         if mode is None and last_mode is not None:
             mode = last_mode
 
         if mode is None:
             return None
 
-        self._hass.data[DOMAIN][self._entry_id]["last_selected_custom_mode"] = int(mode)
+        runtime.last_selected_custom_mode = int(mode)
         return CUSTOM_EFFECT_MODES.get(int(mode), str(mode))
 
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data or {}
-        current = (data.get("current_effect") or {}).get("mode")
+        current = get_effect_mode(data.get("current_effect") or {})
         if current is None:
-            current = self._hass.data[DOMAIN][self._entry_id].get("last_selected_custom_mode")
+            current = self._data.last_selected_custom_mode
         modes = [{"id": k, "name": v} for k, v in sorted(CUSTOM_EFFECT_MODES.items())]
         return {"current_mode_id": current, "modes": modes}
 
     async def async_select_option(self, option: str) -> None:
-        data = self._hass.data[DOMAIN][self._entry_id]
+        data = self._data
         coord = self.coordinator.data or {}
-        api = data["api"]
+        api = data.api
 
         mode = None
         for key, label in CUSTOM_EFFECT_MODES.items():
@@ -325,12 +311,12 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         if current_effect and current_effect.get("category") in (1, 2):
             effect = dict(current_effect)
         else:
-            presets = (coord.get("custom_effects") or data.get("custom_cache", []))
+            presets = (coord.get("custom_effects") or data.custom_cache)
             match = next((e for e in presets if e.get("id") == effect_id), None)
             if match:
                 effect = dict(match)
                 if effect.get("mode") is None:
-                    effect["mode"] = _get_effect_mode(match)
+                    effect["mode"] = get_effect_mode(match)
 
         if not effect:
             return
@@ -338,11 +324,11 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         effect["category"] = 2
         effect["mode"] = mode
 
-        brightness = data.get("last_brightness", 255)
-        speed = data.get("last_speed", 100)
+        brightness = data.last_brightness
+        speed = data.last_speed
         await api.preview_effect(effect, brightness, speed=speed)
 
-        data["last_selected_custom_mode"] = mode
+        data.last_selected_custom_mode = mode
 
         updated = dict(coord)
         current = dict(updated.get("current_effect") or {})
