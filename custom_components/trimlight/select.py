@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import uuid
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -228,6 +229,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             _LOGGER.warning("Custom preset '%s' is missing id and cannot be applied", option)
             return
 
+        correlation_id = uuid.uuid4().hex[:8]
         api = data.api
         was_off = int(coord.get("switch_state", 0) or 0) == 0
         selected_name = (match.get("name") or "").strip() or "(no name)"
@@ -235,7 +237,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         pixels = match.get("pixels")
         pixel_count = len(pixels) if isinstance(pixels, list) else None
         _LOGGER.info(
-            "Custom preset selected: name='%s' id=%s mode=%s pixels=%s was_off=%s commit=%s",
+            "Custom preset selected: cid=%s name='%s' id=%s mode=%s pixels=%s was_off=%s commit=%s",
+            correlation_id,
             selected_name,
             effect_id,
             selected_mode,
@@ -248,12 +251,13 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         try:
             switch_resp = await api.set_switch_state(1)
             _LOGGER.info(
-                "Custom preset switch-on response: code=%s desc=%s",
+                "Custom preset switch-on response: cid=%s code=%s desc=%s",
+                correlation_id,
                 _resp_code(switch_resp),
                 _resp_desc(switch_resp),
             )
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.warning("Custom preset switch-on failed: %s", exc)
+            _LOGGER.warning("Custom preset switch-on failed: cid=%s error=%s", correlation_id, exc)
         # Keep UI on for a short grace window while the controller catches up.
         data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
 
@@ -284,15 +288,17 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                 preview_resp = await api.preview_effect(effect, int(brightness), speed=int(speed))
                 preview_ok = True
                 _LOGGER.info(
-                    "Custom preset preview response: code=%s desc=%s",
+                    "Custom preset preview response: cid=%s code=%s desc=%s",
+                    correlation_id,
                     _resp_code(preview_resp),
                     _resp_desc(preview_resp),
                 )
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.warning("Custom preset preview failed: %s", exc)
+                _LOGGER.warning("Custom preset preview failed: cid=%s error=%s", correlation_id, exc)
         else:
             _LOGGER.info(
-                "Custom preset preview skipped (missing mode or pixels); mode=%s pixels=%s commit=%s",
+                "Custom preset preview skipped: cid=%s reason=missing_mode_or_pixels mode=%s pixels=%s commit=%s",
+                correlation_id,
                 mode,
                 pixel_count,
                 data.commit_custom_preset,
@@ -308,7 +314,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                     await asyncio.sleep(commit_delay_s)
                 run_resp = await api.run_effect(int(effect_id))
                 _LOGGER.info(
-                    "Custom preset run_effect fallback response: code=%s desc=%s id=%s",
+                    "Custom preset run_effect fallback response: cid=%s code=%s desc=%s id=%s",
+                    correlation_id,
                     _resp_code(run_resp),
                     _resp_desc(run_resp),
                     effect_id,
@@ -320,13 +327,18 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                     try:
                         run_resp = await api.run_effect(int(effect_id))
                         _LOGGER.info(
-                            "Custom preset run_effect response: code=%s desc=%s id=%s",
+                            "Custom preset run_effect response: cid=%s code=%s desc=%s id=%s",
+                            correlation_id,
                             _resp_code(run_resp),
                             _resp_desc(run_resp),
                             effect_id,
                         )
                     except Exception as exc:  # noqa: BLE001
-                        _LOGGER.warning("Custom preset run_effect failed: %s", exc)
+                        _LOGGER.warning(
+                            "Custom preset run_effect failed: cid=%s error=%s",
+                            correlation_id,
+                            exc,
+                        )
 
                 self._hass.async_create_task(_run_effect(commit_delay_s))
         elif was_off and preview_ok:
@@ -336,12 +348,17 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                 try:
                     reassert_resp = await api.preview_effect(effect, int(brightness), speed=int(speed))
                     _LOGGER.info(
-                        "Custom preset delayed preview response: code=%s desc=%s",
+                        "Custom preset delayed preview response: cid=%s code=%s desc=%s",
+                        correlation_id,
                         _resp_code(reassert_resp),
                         _resp_desc(reassert_resp),
                     )
                 except Exception as exc:  # noqa: BLE001
-                    _LOGGER.warning("Custom preset delayed preview failed: %s", exc)
+                    _LOGGER.warning(
+                        "Custom preset delayed preview failed: cid=%s error=%s",
+                        correlation_id,
+                        exc,
+                    )
 
             self._hass.async_create_task(_reassert_preview())
 
@@ -377,7 +394,10 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             }
         )
         self.coordinator.async_set_updated_data(updated)
-        self._schedule_verification_refresh()
+        self._schedule_verification_refresh(
+            correlation_id=correlation_id,
+            source="custom_preset_select",
+        )
 
 
 class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
