@@ -210,19 +210,39 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             data.last_speed = int(speed)
 
         # Preview immediately to reduce perceived latency.
-        try:
-            await api.preview_effect(match, int(brightness), speed=int(speed))
-        except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("Custom preset preview failed; falling back to run_effect", exc_info=exc)
+        effect = dict(match)
+        mode = get_effect_mode(effect)
+        if mode is not None:
+            effect["mode"] = mode
+        if effect.get("category") is None:
+            effect["category"] = 2
+
+        can_preview = mode is not None and effect.get("pixels") is not None
+        preview_ok = False
+        if can_preview:
+            try:
+                await api.preview_effect(effect, int(brightness), speed=int(speed))
+                preview_ok = True
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.debug("Custom preset preview failed", exc_info=exc)
+        else:
+            _LOGGER.debug(
+                "Custom preset preview skipped (missing mode/pixels); commit=%s",
+                data.commit_custom_preset,
+            )
 
         if data.commit_custom_preset:
-            async def _run_effect() -> None:
-                try:
-                    await api.run_effect(int(match.get("id")))
-                except Exception as exc:  # noqa: BLE001
-                    _LOGGER.debug("Custom preset run_effect failed", exc_info=exc)
+            if not preview_ok:
+                # Fall back to the original (blocking) call if preview did not run.
+                await api.run_effect(int(match.get("id")))
+            else:
+                async def _run_effect() -> None:
+                    try:
+                        await api.run_effect(int(match.get("id")))
+                    except Exception as exc:  # noqa: BLE001
+                        _LOGGER.debug("Custom preset run_effect failed", exc_info=exc)
 
-            self._hass.async_create_task(_run_effect())
+                self._hass.async_create_task(_run_effect())
 
         # Optimistic UI update: reflect the selected preset immediately
         selected_name = (match.get("name") or "").strip() or "(no name)"
