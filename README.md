@@ -233,6 +233,7 @@ action:
 
 - Verification refresh happens 5 seconds after each command (`VERIFY_REFRESH_DELAY_SECONDS`).
 - If you don’t see custom presets, press the refresh button and check the debug cache file in your HA config folder.
+- Custom effects may be reported by the device as category 1 or 2; the integration accepts both.
 - If built-in presets are empty on first load, the integration will fall back to the static built‑in list.
 - API credentials are required for every call; a bad key or secret will cause setup failures.
 - If the current preset shows `Unknown`, select a preset once so it can be cached.

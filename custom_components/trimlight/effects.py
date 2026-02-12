@@ -26,7 +26,8 @@ def normalize_effect_mode(effect: dict[str, Any]) -> None:
 
 
 def normalize_custom_effects(effects: list[Effect]) -> list[Effect]:
-    custom_effects = [e for e in effects if e.get("category") == 2]
+    # Devices may report custom effects as category 1 or 2 depending on firmware/API.
+    custom_effects = [e for e in effects if e.get("category") in (1, 2)]
     for effect in custom_effects:
         normalize_effect_mode(effect)
     custom_effects.sort(key=lambda e: e.get("id", 9999))
