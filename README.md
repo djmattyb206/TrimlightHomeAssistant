@@ -172,6 +172,7 @@ Use `select.trimlight_built_in_preset`.
 Use `select.trimlight_custom_preset`.
 - Choosing an option previews the custom effect immediately.
 - If "Commit custom presets" is enabled (default), the saved preset is applied by id in the background.
+- If preview payload is incomplete (missing mode/pixels), the integration falls back to applying by saved effect id.
 - Speed + brightness changes update the active custom effect via preview.
 
 ### Custom Effect Modes
@@ -239,7 +240,7 @@ action:
 - If the current preset shows `Unknown`, select a preset once so it can be cached.
 - Polling interval is 10 minutes (`DEFAULT_POLL_INTERVAL_SECONDS`).
 - UI uses a 20-second on grace window after actions to avoid flicker (`FORCED_ON_GRACE_SECONDS`).
-- Options: "Commit custom presets" (default on) controls whether selecting a custom preset also runs the saved preset id in the background. Turn it off for preview-only behavior.
+- Options: "Commit custom presets" (default on) controls whether selecting a custom preset also runs the saved preset id in the background. When off, preview is used first; if preview data is incomplete, id-apply fallback is used so selection still works.
 
 ---
 

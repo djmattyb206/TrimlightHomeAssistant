@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -14,6 +15,21 @@ from .entity import TrimlightEntity
 from .effects import get_effect_mode
 
 _LOGGER = logging.getLogger(__name__)
+_CUSTOM_PRESET_REAPPLY_DELAY_SECONDS = 0.8
+
+
+def _resp_code(resp: dict | None) -> int | None:
+    if not isinstance(resp, dict):
+        return None
+    code = resp.get("code")
+    return int(code) if code is not None else None
+
+
+def _resp_desc(resp: dict | None) -> str | None:
+    if not isinstance(resp, dict):
+        return None
+    desc = resp.get("desc")
+    return str(desc) if desc is not None else None
 
 
 async def async_setup_entry(
@@ -89,7 +105,8 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
         brightness = data.last_brightness
         speed = data.last_speed
-        await api.preview_builtin(match.get("mode", match.get("id")), brightness=brightness, speed=speed)
+        selected_mode = int(match.get("mode", match.get("id")))
+        await api.preview_builtin(selected_mode, brightness=brightness, speed=speed)
 
         # Track last selected preset for sensor fallback
         data.last_selected_preset = match.get("name")
@@ -98,9 +115,26 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         # Clear custom selection context when a built-in is chosen
         data.last_selected_custom_preset = None
         data.last_selected_custom_mode = None
-        # Optimistic UI update for on/off state
+        # Optimistic UI update: reflect built-in selection immediately so
+        # custom select clears even before coordinator refresh.
+        current_effect = {
+            "id": match.get("id", selected_mode),
+            "name": match.get("name"),
+            "category": 0,
+            "mode": selected_mode,
+            "brightness": brightness,
+            "speed": speed,
+        }
         updated = dict(self.coordinator.data or {})
-        updated["switch_state"] = 1
+        updated.update(
+            {
+                "switch_state": 1,
+                "current_effect": current_effect,
+                "current_effect_id": current_effect.get("id"),
+                "current_effect_category": 0,
+                "brightness": brightness,
+            }
+        )
         self.coordinator.async_set_updated_data(updated)
         self._schedule_verification_refresh()
 
@@ -177,7 +211,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         data = self._data
-        presets = (self.coordinator.data or {}).get("custom_effects") or data.custom_cache
+        coord = self.coordinator.data or {}
+        presets = coord.get("custom_effects") or data.custom_cache
         match = None
         for e in presets:
             name = (e.get("name") or "").strip() or "(no name)"
@@ -188,12 +223,37 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         if not match:
             return
 
+        effect_id = match.get("id")
+        if effect_id is None:
+            _LOGGER.warning("Custom preset '%s' is missing id and cannot be applied", option)
+            return
+
         api = data.api
+        was_off = int(coord.get("switch_state", 0) or 0) == 0
+        selected_name = (match.get("name") or "").strip() or "(no name)"
+        selected_mode = get_effect_mode(match)
+        pixels = match.get("pixels")
+        pixel_count = len(pixels) if isinstance(pixels, list) else None
+        _LOGGER.info(
+            "Custom preset selected: name='%s' id=%s mode=%s pixels=%s was_off=%s commit=%s",
+            selected_name,
+            effect_id,
+            selected_mode,
+            pixel_count,
+            was_off,
+            data.commit_custom_preset,
+        )
+
         # Ensure the lights are on when a preset is selected.
         try:
-            await api.set_switch_state(1)
-        except Exception:
-            pass
+            switch_resp = await api.set_switch_state(1)
+            _LOGGER.info(
+                "Custom preset switch-on response: code=%s desc=%s",
+                _resp_code(switch_resp),
+                _resp_desc(switch_resp),
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("Custom preset switch-on failed: %s", exc)
         # Keep UI on for a short grace window while the controller catches up.
         data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
 
@@ -221,31 +281,71 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         preview_ok = False
         if can_preview:
             try:
-                await api.preview_effect(effect, int(brightness), speed=int(speed))
+                preview_resp = await api.preview_effect(effect, int(brightness), speed=int(speed))
                 preview_ok = True
+                _LOGGER.info(
+                    "Custom preset preview response: code=%s desc=%s",
+                    _resp_code(preview_resp),
+                    _resp_desc(preview_resp),
+                )
             except Exception as exc:  # noqa: BLE001
-                _LOGGER.debug("Custom preset preview failed", exc_info=exc)
+                _LOGGER.warning("Custom preset preview failed: %s", exc)
         else:
-            _LOGGER.debug(
-                "Custom preset preview skipped (missing mode/pixels); commit=%s",
+            _LOGGER.info(
+                "Custom preset preview skipped (missing mode or pixels); mode=%s pixels=%s commit=%s",
+                mode,
+                pixel_count,
                 data.commit_custom_preset,
             )
 
-        if data.commit_custom_preset:
-            if not preview_ok:
-                # Fall back to the original (blocking) call if preview did not run.
-                await api.run_effect(int(match.get("id")))
-            else:
-                async def _run_effect() -> None:
-                    try:
-                        await api.run_effect(int(match.get("id")))
-                    except Exception as exc:  # noqa: BLE001
-                        _LOGGER.debug("Custom preset run_effect failed", exc_info=exc)
+        commit_delay_s = _CUSTOM_PRESET_REAPPLY_DELAY_SECONDS if was_off else 0.0
+        should_run_effect = data.commit_custom_preset or not preview_ok
 
-                self._hass.async_create_task(_run_effect())
+        if should_run_effect:
+            if not preview_ok:
+                # If preview is unavailable, force apply with saved effect id.
+                if commit_delay_s > 0:
+                    await asyncio.sleep(commit_delay_s)
+                run_resp = await api.run_effect(int(effect_id))
+                _LOGGER.info(
+                    "Custom preset run_effect fallback response: code=%s desc=%s id=%s",
+                    _resp_code(run_resp),
+                    _resp_desc(run_resp),
+                    effect_id,
+                )
+            else:
+                async def _run_effect(delay_s: float) -> None:
+                    if delay_s > 0:
+                        await asyncio.sleep(delay_s)
+                    try:
+                        run_resp = await api.run_effect(int(effect_id))
+                        _LOGGER.info(
+                            "Custom preset run_effect response: code=%s desc=%s id=%s",
+                            _resp_code(run_resp),
+                            _resp_desc(run_resp),
+                            effect_id,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        _LOGGER.warning("Custom preset run_effect failed: %s", exc)
+
+                self._hass.async_create_task(_run_effect(commit_delay_s))
+        elif was_off and preview_ok:
+            # In preview-only mode, reassert once after power-on to avoid stale-state restore.
+            async def _reassert_preview() -> None:
+                await asyncio.sleep(_CUSTOM_PRESET_REAPPLY_DELAY_SECONDS)
+                try:
+                    reassert_resp = await api.preview_effect(effect, int(brightness), speed=int(speed))
+                    _LOGGER.info(
+                        "Custom preset delayed preview response: code=%s desc=%s",
+                        _resp_code(reassert_resp),
+                        _resp_desc(reassert_resp),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.warning("Custom preset delayed preview failed: %s", exc)
+
+            self._hass.async_create_task(_reassert_preview())
 
         # Optimistic UI update: reflect the selected preset immediately
-        selected_name = (match.get("name") or "").strip() or "(no name)"
         data.last_selected_preset = selected_name
         data.last_selected_custom_preset = selected_name
         data.last_known_preset = selected_name
@@ -256,7 +356,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         if mode is not None:
             data.last_selected_custom_mode = mode
         current_effect = {
-            "id": match.get("id"),
+            "id": effect_id,
             "name": (match.get("name") or "").strip() or "(no name)",
             "category": 2,
             "mode": get_effect_mode(match),
