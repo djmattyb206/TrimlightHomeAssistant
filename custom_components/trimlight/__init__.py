@@ -6,7 +6,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TrimlightApi, TrimlightCredentials
-from .const import CONF_DEVICE_ID, DOMAIN, build_builtin_presets_from_effects, build_builtin_presets_static
+from .const import (
+    CONF_COMMIT_CUSTOM_PRESET,
+    CONF_DEVICE_ID,
+    DEFAULT_COMMIT_CUSTOM_PRESET,
+    DOMAIN,
+    build_builtin_presets_from_effects,
+    build_builtin_presets_static,
+)
 from .coordinator import TrimlightCoordinator
 from .data import TrimlightData
 from .storage import get_debug_cache_path, load_preset_cache, setup_preset_cache_listener
@@ -33,6 +40,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         builtins=builtins,
         custom_cache=custom_cache,
         builtins_refreshed=bool(builtins),
+        commit_custom_preset=entry.options.get(
+            CONF_COMMIT_CUSTOM_PRESET, DEFAULT_COMMIT_CUSTOM_PRESET
+        ),
     )
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
@@ -49,6 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     setup_preset_cache_listener(hass, runtime, coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_entry_updated))
     return True
 
 
@@ -57,3 +68,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
+
+
+async def _async_entry_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)

@@ -15,5 +15,16 @@
     "error": {
       "cannot_connect": "Failed to connect to Trimlight."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Trimlight options",
+        "description": "When enabled, selecting a custom preset will also run the saved preset by id in the background.",
+        "data": {
+          "commit_custom_preset": "Commit custom presets"
+        }
+      }
+    }
   }
 }

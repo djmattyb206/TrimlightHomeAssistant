@@ -7,6 +7,8 @@ FORCED_ON_GRACE_SECONDS = 20
 VERIFY_REFRESH_DELAY_SECONDS = 5
 
 CONF_DEVICE_ID = "device_id"
+CONF_COMMIT_CUSTOM_PRESET = "commit_custom_preset"
+DEFAULT_COMMIT_CUSTOM_PRESET = True
 
 
 def build_builtin_presets_from_effects(effects: list[dict]) -> list[dict]:

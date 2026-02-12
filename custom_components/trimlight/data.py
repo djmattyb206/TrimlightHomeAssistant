@@ -22,6 +22,7 @@ class TrimlightData:
     builtins: list[BuiltinPreset]
     custom_cache: list[Effect]
     builtins_refreshed: bool
+    commit_custom_preset: bool
     last_brightness: int = 255
     last_speed: int = 100
     last_selected_preset: str | None = None

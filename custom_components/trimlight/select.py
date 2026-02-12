@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 
 from homeassistant.components.select import SelectEntity
@@ -11,6 +12,8 @@ from .const import CUSTOM_EFFECT_MODES, FORCED_ON_GRACE_SECONDS
 from .data import get_data
 from .entity import TrimlightEntity
 from .effects import get_effect_mode
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -193,7 +196,33 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             pass
         # Keep UI on for a short grace window while the controller catches up.
         data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
-        await api.run_effect(int(match.get("id")))
+
+        brightness = match.get("brightness")
+        if brightness is None:
+            brightness = data.last_brightness
+        else:
+            data.last_brightness = int(brightness)
+
+        speed = match.get("speed")
+        if speed is None:
+            speed = data.last_speed
+        else:
+            data.last_speed = int(speed)
+
+        # Preview immediately to reduce perceived latency.
+        try:
+            await api.preview_effect(match, int(brightness), speed=int(speed))
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.debug("Custom preset preview failed; falling back to run_effect", exc_info=exc)
+
+        if data.commit_custom_preset:
+            async def _run_effect() -> None:
+                try:
+                    await api.run_effect(int(match.get("id")))
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.debug("Custom preset run_effect failed", exc_info=exc)
+
+            self._hass.async_create_task(_run_effect())
 
         # Optimistic UI update: reflect the selected preset immediately
         selected_name = (match.get("name") or "").strip() or "(no name)"
@@ -206,13 +235,6 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         mode = get_effect_mode(match)
         if mode is not None:
             data.last_selected_custom_mode = mode
-        brightness = match.get("brightness")
-        speed = match.get("speed")
-        if brightness is not None:
-            data.last_brightness = int(brightness)
-        if speed is not None:
-            data.last_speed = int(speed)
-
         current_effect = {
             "id": match.get("id"),
             "name": (match.get("name") or "").strip() or "(no name)",
