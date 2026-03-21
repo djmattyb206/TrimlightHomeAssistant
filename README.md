@@ -40,7 +40,7 @@ You need:
 - `client_secret`
 - `device_id`
 
-These come from your Trimlight EDGE account / device and can be obtained using the scripts in `TrimlightEdgeControl`.
+These come from your Trimlight EDGE account. The `client_id` is the login that you use when logging into the Trimlight app. The `client_secret` must be provided to you by the Trimlight developers. The `devide_id` can be obtained using the scripts in `TrimlightEdgeControl`.
 
 ### First Run Behavior
 - On the first refresh, built-in presets are pulled from the device and cached.
@@ -173,6 +173,7 @@ Use `select.trimlight_custom_preset`.
 - Choosing an option previews the custom effect immediately.
 - If "Commit custom presets" is enabled (default), the saved preset is applied by id in the background.
 - If preview payload is incomplete (missing mode/pixels), the integration falls back to applying by saved effect id.
+- Duplicate preset names are disambiguated in the option list as `Name (id <id>)`.
 - Speed + brightness changes update the active custom effect via preview.
 
 ### Custom Effect Modes
@@ -183,7 +184,7 @@ Use `select.trimlight_custom_effect_mode`.
 
 ### Select Entity Attributes
 The select entities expose extra attributes for IDs and lookup:
-- `select.trimlight_custom_preset`: `current_id`, `presets` (list of `{id,name}`), `name_to_id` (unique names only).
+- `select.trimlight_custom_preset`: `current_id`, `presets` (list of `{id,name}`), `name_to_id` (unique names only), `option_to_id` (exact option label to id map, including disambiguated duplicates).
 - `select.trimlight_built_in_preset`: `current_id`, `builtins` (list of `{id,mode,name}`).
 - `select.trimlight_custom_effect_mode`: `current_mode_id`, `modes` (list of `{id,name}`).
 
