@@ -29,6 +29,7 @@ Entities created:
 - Select entities expose ID/lookup attributes for preset tracking
 
 Presets are cached in Home Assistant storage so they persist after restarts. A human-readable cache file is also written to your HA config folder as `trimlight_presets_<entry_id>.json`.
+When debug logging is enabled in the integration options, the integration also writes a structured JSONL log to `trimlight_debug_<entry_id>.jsonl` in your HA config folder.
 
 ---
 
@@ -165,14 +166,16 @@ Use `number.trimlight_effect_speed`.
 
 ### Select Built-in Presets
 Use `select.trimlight_built_in_preset`.
-- Choosing an option previews the built-in effect.
-- Speed + brightness changes continue to apply to the active built‑in effect.
+- Choosing an option powers the controller on if needed, then tries to preview the built-in effect.
+- If the controller rejects built-in preview, the integration falls back to applying the saved built-in effect by id using `effect/view`.
+- The UI updates optimistically, then confirms via verification refresh.
+- Brightness + speed changes for built-in effects are still sent as preview updates.
 
 ### Select Custom Presets
 Use `select.trimlight_custom_preset`.
-- Choosing an option previews the custom effect immediately.
-- If "Commit custom presets" is enabled (default), the saved preset is applied by id in the background.
-- If preview payload is incomplete (missing mode/pixels), the integration falls back to applying by saved effect id.
+- Choosing an option applies the saved custom preset by id using `effect/view`.
+- If the controller is off, the integration powers it on first, waits briefly, then applies the preset.
+- The UI updates optimistically, then confirms via verification refresh.
 - Duplicate preset names are disambiguated in the option list as `Name (id <id>)`.
 - Speed + brightness changes update the active custom effect via preview.
 
@@ -191,16 +194,18 @@ The select entities expose extra attributes for IDs and lookup:
 ### Current Preset Sensor
 `sensor.trimlight_current_preset` shows the active preset name.
 - Uses the API's `currentEffect` when available.
-- Falls back to the last selected preset if needed.
+- Falls back to the select entity state and last selected preset if needed.
+- For custom presets, if the controller omits the saved effect id, the sensor resolves the active preset from the custom select state and cached preset list.
 - Attributes (from API effect fields):
   - `current_effect_id`: integer ID of saved effect. `-1` means preview (not yet saved).
-  - `current_effect_category`: integer. `0` = built-in effect, `1` = custom effect.
+  - `current_effect_category`: integer. `0` = built-in effect, `1` or `2` = custom effect.
   - `current_effect_mode`: integer. Built-in mode range `0-179`; custom mode range `0-19` (documented).
   - `current_effect_speed`: integer `0-255`.
   - `current_effect_brightness`: integer `0-255`.
   - `current_effect_pixel_len`: integer `1-90` (only required for built-in effects).
   - `current_effect_reverse`: boolean (only required for built-in effects).
   - `current_effect_pixels`: list of pixels for custom effects. Each entry includes `index`, `count`, `color` (RGB int), `disable` (bool).
+  - When a saved custom preset can be resolved, pixel/speed/brightness attributes prefer that saved preset definition over stale controller data.
   - If `current_effect_pixels` is empty/disabled, the integration falls back to last known custom pixels.
 
 ### Refresh Preset Lists
@@ -234,6 +239,7 @@ action:
 ## Notes and Troubleshooting
 
 - Verification refresh happens 5 seconds after each command (`VERIFY_REFRESH_DELAY_SECONDS`).
+- Custom preset selection from off uses a longer delayed verification refresh so the controller has time to finish powering on and applying the preset.
 - If you don’t see custom presets, press the refresh button and check the debug cache file in your HA config folder.
 - Custom effects may be reported by the device as category 1 or 2; the integration accepts both.
 - If built-in presets are empty on first load, the integration will fall back to the static built‑in list.
@@ -241,7 +247,9 @@ action:
 - If the current preset shows `Unknown`, select a preset once so it can be cached.
 - Polling interval is 10 minutes (`DEFAULT_POLL_INTERVAL_SECONDS`).
 - UI uses a 20-second on grace window after actions to avoid flicker (`FORCED_ON_GRACE_SECONDS`).
-- Options: "Commit custom presets" (default on) controls whether selecting a custom preset also runs the saved preset id in the background. When off, preview is used first; if preview data is incomplete, id-apply fallback is used so selection still works.
+- Options:
+  - `Commit custom presets` is still present in the options flow for compatibility, but saved custom preset selection now applies by id directly.
+  - `Enable debug logging` writes `trimlight_debug_<entry_id>.jsonl` in the HA config folder with structured action, refresh, and state snapshots.
 
 ---
 

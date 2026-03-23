@@ -177,6 +177,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             return
 
         api = data.api
+        correlation_id = uuid.uuid4().hex[:8]
         # Ensure the lights are on when a preset is selected.
         switch_resp = None
         try:
@@ -189,6 +190,29 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         speed = data.last_speed
         selected_mode = int(match.get("mode", match.get("id")))
         preview_resp = await api.preview_builtin(selected_mode, brightness=brightness, speed=speed)
+        preview_code = _resp_code(preview_resp)
+        preview_desc = _resp_desc(preview_resp)
+        applied_via = "preview"
+        view_resp = None
+        view_effect_id = match.get("id")
+
+        if preview_code not in (None, 0) and view_effect_id is not None:
+            _LOGGER.warning(
+                "Builtin preset preview rejected: cid=%s option=%s mode=%s code=%s desc=%s; falling back to effect/view id=%s",
+                correlation_id,
+                option,
+                selected_mode,
+                preview_code,
+                preview_desc,
+                view_effect_id,
+            )
+            view_success, view_resp = await _call_with_retry(
+                action="Builtin preset view",
+                correlation_id=correlation_id,
+                request=lambda: api.run_effect(int(view_effect_id)),
+            )
+            if view_success:
+                applied_via = "view"
 
         # Track last selected preset for sensor fallback
         data.last_selected_preset = match.get("name")
@@ -222,13 +246,19 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             self._hass,
             data,
             "builtin_preset_select",
+            correlation_id=correlation_id,
             coordinator_data=updated,
             option=option,
             preset=match,
+            applied_via=applied_via,
             switch_response=switch_resp,
             preview_response=preview_resp,
+            view_response=view_resp,
         )
-        self._schedule_verification_refresh()
+        self._schedule_verification_refresh(
+            correlation_id=correlation_id,
+            source="builtin_preset_select",
+        )
 
 
 class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
