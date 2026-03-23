@@ -101,21 +101,32 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         data = self.coordinator.data or {}
         current_effect = data.get("current_effect") or {}
         mode = get_effect_mode(current_effect)
+        effect_id = data.get("current_effect_id")
+        current_category = data.get("current_effect_category")
+        runtime = self._data
+        presets = (data.get("custom_effects") or runtime.custom_cache)
 
-        pixels = current_effect.get("pixels")
+        pixels = None
+        if current_category in (1, 2) and effect_id not in (None, -1):
+            match = next((e for e in presets if e.get("id") == effect_id), None)
+            if match and match.get("pixels"):
+                pixels = match.get("pixels")
+
         if not pixels:
-            pixels = self._data.last_known_custom_pixels
+            pixels = current_effect.get("pixels")
+        if not pixels:
+            pixels = runtime.last_known_custom_pixels
         else:
             # If controller returns an empty/disabled pixel map, fall back to last known pixels.
             has_data = any(
                 (p.get("count", 0) or 0) > 0 or (p.get("color", 0) or 0) != 0 for p in pixels
             )
             if not has_data:
-                pixels = self._data.last_known_custom_pixels or pixels
+                pixels = runtime.last_known_custom_pixels or pixels
 
         return {
-            "current_effect_id": data.get("current_effect_id"),
-            "current_effect_category": data.get("current_effect_category"),
+            "current_effect_id": effect_id,
+            "current_effect_category": current_category,
             "current_effect_mode": mode,
             "current_effect_speed": current_effect.get("speed"),
             "current_effect_brightness": current_effect.get("brightness"),
