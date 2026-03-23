@@ -20,6 +20,7 @@ from .effects import get_effect_mode
 _LOGGER = logging.getLogger(__name__)
 _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
+_CUSTOM_PRESET_POWER_ON_DELAY_SECONDS = 0.8
 
 
 def _resp_code(resp: dict | None) -> int | None:
@@ -463,12 +464,14 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
 
         try:
-            # Ensure the lights are on when a preset is selected.
-            await _call_with_retry(
-                action="Custom preset switch-on",
-                correlation_id=correlation_id,
-                request=lambda: api.set_switch_state(1),
-            )
+            if was_off:
+                # Only force manual mode when the controller is actually off.
+                await _call_with_retry(
+                    action="Custom preset switch-on",
+                    correlation_id=correlation_id,
+                    request=lambda: api.set_switch_state(1),
+                )
+                await asyncio.sleep(_CUSTOM_PRESET_POWER_ON_DELAY_SECONDS)
             await _call_with_retry(
                 action=f"Custom preset run_effect id={effect_id}",
                 correlation_id=correlation_id,
