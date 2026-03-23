@@ -20,7 +20,7 @@
     "step": {
       "init": {
         "title": "Trimlight options",
-        "description": "Commit custom presets runs the saved preset by id after selection. Enable debug logging to write structured events to trimlight_debug_<entry_id>.jsonl in your Home Assistant config directory.",
+        "description": "Commit custom presets runs the saved preset by ID after selection. Enable debug logging to write structured events to trimlight_debug_ENTRY_ID.jsonl in your Home Assistant config directory.",
         "data": {
           "commit_custom_preset": "Commit custom presets",
           "debug_logging": "Enable debug logging"
