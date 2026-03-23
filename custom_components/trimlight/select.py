@@ -18,7 +18,6 @@ from .entity import TrimlightEntity
 from .effects import get_effect_mode
 
 _LOGGER = logging.getLogger(__name__)
-_CUSTOM_PRESET_REAPPLY_DELAY_SECONDS = 0.8
 _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
 
@@ -427,7 +426,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         pixels = match.get("pixels")
         pixel_count = len(pixels) if isinstance(pixels, list) else None
         _LOGGER.info(
-            "Custom preset selected: cid=%s option='%s' name='%s' id=%s mode=%s pixels=%s was_off=%s commit=%s",
+            "Custom preset selected: cid=%s option='%s' name='%s' id=%s mode=%s pixels=%s was_off=%s apply=run_effect",
             correlation_id,
             selected_label,
             selected_name,
@@ -435,7 +434,6 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             selected_mode,
             pixel_count,
             was_off,
-            data.commit_custom_preset,
         )
 
         brightness = match.get("brightness")
@@ -464,14 +462,6 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         # Keep UI on for a short grace window while the controller catches up.
         data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
 
-        # Preview immediately to reduce perceived latency.
-        effect = dict(match)
-        mode = get_effect_mode(effect)
-        if mode is not None:
-            effect["mode"] = mode
-        if effect.get("category") is None:
-            effect["category"] = 2
-
         try:
             # Ensure the lights are on when a preset is selected.
             await _call_with_retry(
@@ -479,53 +469,11 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                 correlation_id=correlation_id,
                 request=lambda: api.set_switch_state(1),
             )
-
-            can_preview = mode is not None and effect.get("pixels") is not None
-            preview_ok = False
-            if can_preview:
-                preview_ok, _ = await _call_with_retry(
-                    action="Custom preset preview",
-                    correlation_id=correlation_id,
-                    request=lambda: api.preview_effect(effect, brightness, speed=speed),
-                )
-            else:
-                _LOGGER.info(
-                    "Custom preset preview skipped: cid=%s reason=missing_mode_or_pixels mode=%s pixels=%s commit=%s",
-                    correlation_id,
-                    mode,
-                    pixel_count,
-                    data.commit_custom_preset,
-                )
-
-            commit_delay_s = _CUSTOM_PRESET_REAPPLY_DELAY_SECONDS if was_off else 0.0
-            should_run_effect = data.commit_custom_preset or not preview_ok
-
-            async def _run_effect(delay_s: float) -> None:
-                if delay_s > 0:
-                    await asyncio.sleep(delay_s)
-                await _call_with_retry(
-                    action=f"Custom preset run_effect id={effect_id}",
-                    correlation_id=correlation_id,
-                    request=lambda: api.run_effect(effect_id),
-                )
-
-            if should_run_effect:
-                if preview_ok:
-                    self._hass.async_create_task(_run_effect(commit_delay_s))
-                else:
-                    # If preview is unavailable, force apply with saved effect id.
-                    await _run_effect(commit_delay_s)
-            elif was_off and preview_ok:
-                # In preview-only mode, reassert once after power-on to avoid stale-state restore.
-                async def _reassert_preview() -> None:
-                    await asyncio.sleep(_CUSTOM_PRESET_REAPPLY_DELAY_SECONDS)
-                    await _call_with_retry(
-                        action="Custom preset delayed preview",
-                        correlation_id=correlation_id,
-                        request=lambda: api.preview_effect(effect, brightness, speed=speed),
-                    )
-
-                self._hass.async_create_task(_reassert_preview())
+            await _call_with_retry(
+                action=f"Custom preset run_effect id={effect_id}",
+                correlation_id=correlation_id,
+                request=lambda: api.run_effect(effect_id),
+            )
         finally:
             self._schedule_verification_refresh(
                 correlation_id=correlation_id,
