@@ -42,8 +42,10 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
         *,
         correlation_id: str | None = None,
         source: str | None = None,
+        delay_s: float | None = None,
     ) -> None:
         data = self._data
+        delay_s = VERIFY_REFRESH_DELAY_SECONDS if delay_s is None else float(delay_s)
         handle = data.verify_refresh_handle
         if handle:
             handle.cancel()
@@ -52,7 +54,7 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
                     "Verification refresh rescheduled: cid=%s source=%s delay_s=%s",
                     correlation_id,
                     source,
-                    VERIFY_REFRESH_DELAY_SECONDS,
+                    delay_s,
                 )
 
         if correlation_id:
@@ -60,7 +62,7 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
                 "Verification refresh scheduled: cid=%s source=%s delay_s=%s",
                 correlation_id,
                 source,
-                VERIFY_REFRESH_DELAY_SECONDS,
+                delay_s,
             )
 
         async def _do_refresh() -> None:
@@ -89,5 +91,5 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
             self._hass.async_create_task(_do_refresh())
 
         data.verify_refresh_handle = self._hass.loop.call_later(
-            VERIFY_REFRESH_DELAY_SECONDS, _refresh
+            delay_s, _refresh
         )
