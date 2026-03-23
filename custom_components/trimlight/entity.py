@@ -8,6 +8,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, VERIFY_REFRESH_DELAY_SECONDS
 from .coordinator import TrimlightCoordinator
 from .data import TrimlightData, get_data
+from .debug import async_log_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
         data = self._data
         delay_s = VERIFY_REFRESH_DELAY_SECONDS if delay_s is None else float(delay_s)
         handle = data.verify_refresh_handle
+        was_rescheduled = handle is not None
         if handle:
             handle.cancel()
             if correlation_id:
@@ -64,10 +66,30 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
                 source,
                 delay_s,
             )
+        self._hass.async_create_task(
+            async_log_event(
+                self._hass,
+                data,
+                "verification_refresh_scheduled",
+                correlation_id=correlation_id,
+                coordinator_data=self.coordinator.data or {},
+                source=source,
+                delay_s=delay_s,
+                rescheduled=was_rescheduled,
+            )
+        )
 
         async def _do_refresh() -> None:
             if correlation_id:
                 _LOGGER.info("Verification refresh firing: cid=%s source=%s", correlation_id, source)
+            await async_log_event(
+                self._hass,
+                data,
+                "verification_refresh_firing",
+                correlation_id=correlation_id,
+                coordinator_data=self.coordinator.data or {},
+                source=source,
+            )
             try:
                 await self.coordinator.async_refresh()
                 if correlation_id:
@@ -76,6 +98,14 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
                         correlation_id,
                         source,
                     )
+                await async_log_event(
+                    self._hass,
+                    data,
+                    "verification_refresh_completed",
+                    correlation_id=correlation_id,
+                    coordinator_data=self.coordinator.data or {},
+                    source=source,
+                )
             except Exception as exc:  # noqa: BLE001
                 if correlation_id:
                     _LOGGER.warning(
@@ -86,6 +116,15 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
                     )
                 else:
                     _LOGGER.warning("Verification refresh failed: %s", exc)
+                await async_log_event(
+                    self._hass,
+                    data,
+                    "verification_refresh_failed",
+                    correlation_id=correlation_id,
+                    coordinator_data=self.coordinator.data or {},
+                    source=source,
+                    error=str(exc),
+                )
 
         def _refresh() -> None:
             self._hass.async_create_task(_do_refresh())

@@ -105,12 +105,53 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         current_category = data.get("current_effect_category")
         runtime = self._data
         presets = (data.get("custom_effects") or runtime.custom_cache)
+        custom_state = self._hass.states.get("select.trimlight_custom_preset")
+
+        def _valid_state(value: str | None) -> bool:
+            if value is None:
+                return False
+            return value not in {"unknown", "unavailable", "none", ""}
+
+        resolved_effect_id = effect_id
+        resolved_custom_effect = None
+        if current_category in (1, 2):
+            if effect_id not in (None, -1):
+                resolved_custom_effect = next((e for e in presets if e.get("id") == effect_id), None)
+
+            if resolved_custom_effect is None:
+                selected_label = None
+                if custom_state and _valid_state(custom_state.state):
+                    selected_label = custom_state.state
+                elif _valid_state(runtime.last_selected_custom_preset):
+                    selected_label = runtime.last_selected_custom_preset
+                elif _valid_state(runtime.last_known_custom_preset):
+                    selected_label = runtime.last_known_custom_preset
+
+                if selected_label:
+                    option_to_id = (
+                        custom_state.attributes.get("option_to_id", {}) if custom_state else {}
+                    )
+                    name_to_id = (
+                        custom_state.attributes.get("name_to_id", {}) if custom_state else {}
+                    )
+                    matched_id = option_to_id.get(selected_label)
+                    if matched_id is None:
+                        matched_id = name_to_id.get(selected_label)
+                    if matched_id is not None:
+                        matched_id = int(matched_id)
+                        resolved_custom_effect = next(
+                            (e for e in presets if e.get("id") == matched_id),
+                            None,
+                        )
+                        if resolved_custom_effect is not None:
+                            resolved_effect_id = matched_id
+
+        if resolved_custom_effect is not None:
+            mode = get_effect_mode(resolved_custom_effect)
 
         pixels = None
-        if current_category in (1, 2) and effect_id not in (None, -1):
-            match = next((e for e in presets if e.get("id") == effect_id), None)
-            if match and match.get("pixels"):
-                pixels = match.get("pixels")
+        if resolved_custom_effect is not None and resolved_custom_effect.get("pixels"):
+            pixels = resolved_custom_effect.get("pixels")
 
         if not pixels:
             pixels = current_effect.get("pixels")
@@ -125,11 +166,19 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
                 pixels = runtime.last_known_custom_pixels or pixels
 
         return {
-            "current_effect_id": effect_id,
+            "current_effect_id": resolved_effect_id,
             "current_effect_category": current_category,
             "current_effect_mode": mode,
-            "current_effect_speed": current_effect.get("speed"),
-            "current_effect_brightness": current_effect.get("brightness"),
+            "current_effect_speed": (
+                resolved_custom_effect.get("speed")
+                if resolved_custom_effect is not None
+                else current_effect.get("speed")
+            ),
+            "current_effect_brightness": (
+                resolved_custom_effect.get("brightness")
+                if resolved_custom_effect is not None
+                else current_effect.get("brightness")
+            ),
             "current_effect_pixel_len": current_effect.get("pixelLen"),
             "current_effect_reverse": current_effect.get("reverse"),
             "current_effect_pixels": pixels,

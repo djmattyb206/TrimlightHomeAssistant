@@ -8,14 +8,17 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import TrimlightApi, TrimlightCredentials
 from .const import (
     CONF_COMMIT_CUSTOM_PRESET,
+    CONF_DEBUG_LOGGING,
     CONF_DEVICE_ID,
     DEFAULT_COMMIT_CUSTOM_PRESET,
+    DEFAULT_DEBUG_LOGGING,
     DOMAIN,
     build_builtin_presets_from_effects,
     build_builtin_presets_static,
 )
 from .coordinator import TrimlightCoordinator
 from .data import TrimlightData
+from .debug import async_log_event, get_debug_log_path
 from .storage import get_debug_cache_path, load_preset_cache, setup_preset_cache_listener
 
 PLATFORMS: list[str] = ["light", "select", "button", "sensor", "number"]
@@ -37,12 +40,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator=coordinator,
         store=store,
         debug_path=get_debug_cache_path(hass, entry.entry_id),
+        debug_log_path=get_debug_log_path(hass, entry.entry_id),
         builtins=builtins,
         custom_cache=custom_cache,
         builtins_refreshed=bool(builtins),
         commit_custom_preset=entry.options.get(
             CONF_COMMIT_CUSTOM_PRESET, DEFAULT_COMMIT_CUSTOM_PRESET
         ),
+        debug_logging=entry.options.get(CONF_DEBUG_LOGGING, DEFAULT_DEBUG_LOGGING),
     )
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = runtime
@@ -56,6 +61,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if builtins:
             runtime.builtins = builtins
             runtime.builtins_refreshed = True
+
+    await async_log_event(
+        hass,
+        runtime,
+        "integration_setup",
+        coordinator_data=coordinator.data or {},
+        options={
+            "commit_custom_preset": runtime.commit_custom_preset,
+            "debug_logging": runtime.debug_logging,
+        },
+        debug_log_path=runtime.debug_log_path,
+    )
 
     setup_preset_cache_listener(hass, runtime, coordinator)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -11,8 +11,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import TrimlightApi, TrimlightCredentials
 from .const import (
     CONF_COMMIT_CUSTOM_PRESET,
+    CONF_DEBUG_LOGGING,
     CONF_DEVICE_ID,
     DEFAULT_COMMIT_CUSTOM_PRESET,
+    DEFAULT_DEBUG_LOGGING,
     DOMAIN,
 )
 
@@ -70,6 +72,10 @@ class TrimlightOptionsFlow(config_entries.OptionsFlow):
                     default=options.get(
                         CONF_COMMIT_CUSTOM_PRESET, DEFAULT_COMMIT_CUSTOM_PRESET
                     ),
+                ): bool,
+                vol.Optional(
+                    CONF_DEBUG_LOGGING,
+                    default=options.get(CONF_DEBUG_LOGGING, DEFAULT_DEBUG_LOGGING),
                 ): bool,
             }
         )

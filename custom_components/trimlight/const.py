@@ -8,7 +8,9 @@ VERIFY_REFRESH_DELAY_SECONDS = 5
 
 CONF_DEVICE_ID = "device_id"
 CONF_COMMIT_CUSTOM_PRESET = "commit_custom_preset"
+CONF_DEBUG_LOGGING = "debug_logging"
 DEFAULT_COMMIT_CUSTOM_PRESET = True
+DEFAULT_DEBUG_LOGGING = False
 
 
 def build_builtin_presets_from_effects(effects: list[dict]) -> list[dict]:

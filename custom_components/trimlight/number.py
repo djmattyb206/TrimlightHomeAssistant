@@ -7,6 +7,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .controller import apply_effect_update
 from .data import get_data
+from .debug import async_log_event
 from .entity import TrimlightEntity
 
 
@@ -45,5 +46,13 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         data.last_speed = speed
 
         await apply_effect_update(api, data, self.coordinator.data or {}, speed=speed)
+        await async_log_event(
+            self._hass,
+            data,
+            "effect_speed_set",
+            coordinator_data=self.coordinator.data or {},
+            requested_percent=float(value),
+            device_speed=speed,
+        )
 
         self._schedule_verification_refresh()

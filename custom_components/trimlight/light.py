@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import FORCED_ON_GRACE_SECONDS
 from .controller import apply_effect_update
 from .data import get_data
+from .debug import async_log_event
 from .entity import TrimlightEntity
 
 
@@ -65,7 +66,7 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         api = data.api
         brightness = kwargs.get(ATTR_BRIGHTNESS)
 
-        await api.set_switch_state(1)
+        switch_resp = await api.set_switch_state(1)
 
         # Optimistic UI update: mark on immediately
         coord_data = self.coordinator.data or {}
@@ -82,12 +83,21 @@ class TrimlightLight(TrimlightEntity, LightEntity):
                 api, data, self.coordinator.data or {}, brightness=int(brightness)
             )
 
+        await async_log_event(
+            self._hass,
+            data,
+            "light_turn_on",
+            coordinator_data=optimistic,
+            requested_brightness=brightness,
+            switch_response=switch_resp,
+        )
+
         self._schedule_verification_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         data = self._data
         api = data.api
-        await api.set_switch_state(0)
+        switch_resp = await api.set_switch_state(0)
         coord_data = self.coordinator.data or {}
         optimistic = dict(coord_data)
         optimistic["switch_state"] = 0
@@ -102,4 +112,11 @@ class TrimlightLight(TrimlightEntity, LightEntity):
         data.last_selected_preset = None
         data.last_selected_custom_preset = None
         data.last_selected_custom_mode = None
+        await async_log_event(
+            self._hass,
+            data,
+            "light_turn_off",
+            coordinator_data=optimistic,
+            switch_response=switch_resp,
+        )
         self._schedule_verification_refresh()

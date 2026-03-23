@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 from homeassistant.core import HomeAssistant
@@ -19,10 +19,12 @@ class TrimlightData:
     coordinator: TrimlightCoordinator
     store: Store
     debug_path: str
+    debug_log_path: str
     builtins: list[BuiltinPreset]
     custom_cache: list[Effect]
     builtins_refreshed: bool
     commit_custom_preset: bool
+    debug_logging: bool
     last_brightness: int = 255
     last_speed: int = 100
     last_selected_preset: str | None = None
@@ -35,6 +37,7 @@ class TrimlightData:
     forced_on_until: float | None = None
     forced_off_until: float | None = None
     verify_refresh_handle: asyncio.TimerHandle | None = None
+    debug_log_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 def get_data(hass: HomeAssistant, entry_id: str) -> TrimlightData:

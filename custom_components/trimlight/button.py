@@ -7,6 +7,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import build_builtin_presets_from_effects, build_builtin_presets_static
 from .data import get_data
+from .debug import async_log_event
 from .entity import TrimlightEntity
 
 
@@ -27,6 +28,12 @@ class TrimlightRefreshButton(TrimlightEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         data = self._data
+        await async_log_event(
+            self._hass,
+            data,
+            "refresh_presets_button_pressed",
+            coordinator_data=data.coordinator.data or {},
+        )
 
         if not data.builtins_refreshed:
             effects = (data.coordinator.data or {}).get("effects") or []
@@ -38,3 +45,11 @@ class TrimlightRefreshButton(TrimlightEntity, ButtonEntity):
                 data.builtins_refreshed = True
 
         await data.coordinator.async_refresh()
+        await async_log_event(
+            self._hass,
+            data,
+            "refresh_presets_button_completed",
+            coordinator_data=data.coordinator.data or {},
+            builtins_count=len(data.builtins),
+            custom_count=len((data.coordinator.data or {}).get("custom_effects") or data.custom_cache),
+        )

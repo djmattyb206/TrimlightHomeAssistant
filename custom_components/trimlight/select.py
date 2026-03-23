@@ -14,6 +14,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CUSTOM_EFFECT_MODES, FORCED_ON_GRACE_SECONDS
 from .data import get_data
+from .debug import async_log_event
 from .entity import TrimlightEntity
 from .effects import get_effect_mode
 
@@ -177,8 +178,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
 
         api = data.api
         # Ensure the lights are on when a preset is selected.
+        switch_resp = None
         try:
-            await api.set_switch_state(1)
+            switch_resp = await api.set_switch_state(1)
         except Exception:
             pass
         # Keep UI on for a short grace window while the controller catches up.
@@ -186,7 +188,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         brightness = data.last_brightness
         speed = data.last_speed
         selected_mode = int(match.get("mode", match.get("id")))
-        await api.preview_builtin(selected_mode, brightness=brightness, speed=speed)
+        preview_resp = await api.preview_builtin(selected_mode, brightness=brightness, speed=speed)
 
         # Track last selected preset for sensor fallback
         data.last_selected_preset = match.get("name")
@@ -216,6 +218,16 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             }
         )
         self.coordinator.async_set_updated_data(updated)
+        await async_log_event(
+            self._hass,
+            data,
+            "builtin_preset_select",
+            coordinator_data=updated,
+            option=option,
+            preset=match,
+            switch_response=switch_resp,
+            preview_response=preview_resp,
+        )
         self._schedule_verification_refresh()
 
 
@@ -460,6 +472,22 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             brightness=brightness,
             speed=speed,
         )
+        await async_log_event(
+            self._hass,
+            data,
+            "custom_preset_select_requested",
+            correlation_id=correlation_id,
+            coordinator_data=self.coordinator.data or {},
+            option=option,
+            selected_label=selected_label,
+            selected_name=selected_name,
+            effect_id=effect_id,
+            mode=selected_mode,
+            brightness=brightness,
+            speed=speed,
+            was_off=was_off,
+            pixels=match.get("pixels"),
+        )
 
         # Keep UI on for a short grace window while the controller catches up.
         data.forced_on_until = time.monotonic() + FORCED_ON_GRACE_SECONDS
@@ -467,16 +495,35 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         try:
             if was_off:
                 # Only force manual mode when the controller is actually off.
-                await _call_with_retry(
+                switch_ok, switch_resp = await _call_with_retry(
                     action="Custom preset switch-on",
                     correlation_id=correlation_id,
                     request=lambda: api.set_switch_state(1),
                 )
+                await async_log_event(
+                    self._hass,
+                    data,
+                    "custom_preset_switch_on_result",
+                    correlation_id=correlation_id,
+                    coordinator_data=self.coordinator.data or {},
+                    success=switch_ok,
+                    response=switch_resp,
+                )
                 await asyncio.sleep(_CUSTOM_PRESET_POWER_ON_DELAY_SECONDS)
-            await _call_with_retry(
+            run_ok, run_resp = await _call_with_retry(
                 action=f"Custom preset run_effect id={effect_id}",
                 correlation_id=correlation_id,
                 request=lambda: api.run_effect(effect_id),
+            )
+            await async_log_event(
+                self._hass,
+                data,
+                "custom_preset_run_effect_result",
+                correlation_id=correlation_id,
+                coordinator_data=self.coordinator.data or {},
+                success=run_ok,
+                response=run_resp,
+                effect_id=effect_id,
             )
         finally:
             self._schedule_verification_refresh(
@@ -574,7 +621,7 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
 
         brightness = data.last_brightness
         speed = data.last_speed
-        await api.preview_effect(effect, brightness, speed=speed)
+        response = await api.preview_effect(effect, brightness, speed=speed)
 
         data.last_selected_custom_mode = mode
 
@@ -590,4 +637,13 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
             }
         )
         self.coordinator.async_set_updated_data(updated)
+        await async_log_event(
+            self._hass,
+            data,
+            "custom_mode_select",
+            coordinator_data=updated,
+            option=option,
+            mode=mode,
+            response=response,
+        )
         self._schedule_verification_refresh()
