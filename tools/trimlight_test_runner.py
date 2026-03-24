@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -254,6 +254,7 @@ class TrimlightTestRunner:
         service: str,
         service_data: dict[str, Any],
         settle_s: float,
+        settle_condition: Callable[[dict[str, Any]], bool] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         before = self.capture_snapshot()
         started_at = now_iso()
@@ -264,8 +265,21 @@ class TrimlightTestRunner:
         after_action = self.capture_snapshot()
 
         remaining = max(float(settle_s) - capture_after, 0.0)
-        self.sleep(remaining)
-        settled = self.capture_snapshot()
+        settled = after_action
+        condition_met = settle_condition(after_action) if settle_condition else None
+        deadline = time.monotonic() + remaining
+
+        if settle_condition is None:
+            self.sleep(remaining)
+            settled = self.capture_snapshot()
+        else:
+            while time.monotonic() < deadline:
+                sleep_for = min(1.0, max(deadline - time.monotonic(), 0.0))
+                if sleep_for <= 0:
+                    break
+                self.sleep(sleep_for)
+                settled = self.capture_snapshot()
+                condition_met = bool(condition_met) or settle_condition(settled)
 
         step = {
             "name": name,
@@ -280,6 +294,7 @@ class TrimlightTestRunner:
             },
             "checks": [],
             "passed": True,
+            "settle_condition_met": condition_met,
         }
         return step, settled
 
@@ -298,6 +313,12 @@ class TrimlightTestRunner:
     def check_state_eq(self, snapshot: dict[str, Any], key: str, expected: str, label: str) -> dict[str, Any]:
         actual = self.state_value(snapshot, key)
         return self.build_check(name=label, passed=actual == expected, expected=expected, actual=actual)
+
+    def is_state_eq(self, snapshot: dict[str, Any], key: str, expected: str) -> bool:
+        return self.state_value(snapshot, key) == expected
+
+    def is_state_known(self, snapshot: dict[str, Any], key: str) -> bool:
+        return is_known_state(self.state_value(snapshot, key))
 
     def check_state_known(self, snapshot: dict[str, Any], key: str, label: str) -> dict[str, Any]:
         actual = self.state_value(snapshot, key)
@@ -373,6 +394,12 @@ class TrimlightTestRunner:
                 "option": option,
             },
             settle_s=settle_s,
+            settle_condition=lambda snapshot: (
+                self.is_state_eq(snapshot, "light", "on")
+                and self.is_state_eq(snapshot, "indicator_sensor", option)
+                and self.is_state_eq(snapshot, "custom_select", option)
+                and self.is_state_known(snapshot, "custom_mode_select")
+            ),
         )
         checks = [
             self.check_state_eq(settled, "light", "on", "Light is on"),
@@ -396,6 +423,11 @@ class TrimlightTestRunner:
                 "option": option,
             },
             settle_s=settle_s,
+            settle_condition=lambda snapshot: (
+                self.is_state_eq(snapshot, "light", "on")
+                and self.is_state_eq(snapshot, "indicator_sensor", option)
+                and self.is_state_eq(snapshot, "builtin_select", option)
+            ),
         )
         checks = [
             self.check_state_eq(settled, "light", "on", "Light is on"),
@@ -412,6 +444,10 @@ class TrimlightTestRunner:
             service="turn_off",
             service_data={"entity_id": self.config.entity_ids["light"]},
             settle_s=self.config.timing_s["after_power_off"],
+            settle_condition=lambda snapshot: (
+                self.is_state_eq(snapshot, "light", "off")
+                and self.is_state_eq(snapshot, "indicator_sensor", "Off")
+            ),
         )
         checks = [
             self.check_state_eq(settled, "light", "off", "Light entity is off"),
@@ -426,7 +462,13 @@ class TrimlightTestRunner:
             domain="light",
             service="turn_on",
             service_data={"entity_id": self.config.entity_ids["light"]},
-            settle_s=self.config.timing_s["settle_default"],
+            settle_s=self.config.timing_s["settle_cold_start"],
+            settle_condition=lambda snapshot: (
+                self.is_state_eq(snapshot, "light", "on")
+                and self.is_state_eq(snapshot, "indicator_sensor", expected_preset)
+                and self.is_state_eq(snapshot, "custom_select", expected_preset)
+                and self.is_state_known(snapshot, "custom_mode_select")
+            ),
         )
         checks = [
             self.check_state_eq(settled, "light", "on", "Light entity is on"),
@@ -434,12 +476,14 @@ class TrimlightTestRunner:
                 settled, "indicator_sensor", expected_preset, "Indicator sensor restored the active custom preset"
             ),
             self.check_state_eq(settled, "custom_select", expected_preset, "Custom preset select restored"),
+            self.check_state_known(settled, "custom_mode_select", "Custom effect mode select restored"),
             self.check_pixels_present(settled, "Indicator sensor has pixel details"),
         ]
         self.add_checks(step, checks)
         return step
 
     def set_speed(self, value: float, *, expected_preset: str, preset_kind: str) -> dict[str, Any]:
+        expected_select_key = "custom_select" if preset_kind == "custom" else "builtin_select"
         step, settled = self.run_service_step(
             name=f"Set speed to {value}",
             domain="number",
@@ -449,6 +493,12 @@ class TrimlightTestRunner:
                 "value": value,
             },
             settle_s=self.config.timing_s["settle_default"],
+            settle_condition=lambda snapshot: (
+                self.is_state_eq(snapshot, "light", "on")
+                and self.check_numeric_close(snapshot, "speed_number", value, "speed", tolerance=0.51)["passed"]
+                and self.is_state_eq(snapshot, "indicator_sensor", expected_preset)
+                and self.is_state_eq(snapshot, expected_select_key, expected_preset)
+            ),
         )
         checks = [
             self.check_state_eq(settled, "light", "on", "Light is on"),

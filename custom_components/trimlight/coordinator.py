@@ -38,6 +38,30 @@ class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         current_effect_id = current_effect.get("id")
         current_category = current_effect.get("category")
         brightness = current_effect.get("brightness")
+        switch_state = payload.get("switchState")
+
+        previous = self.data or {}
+        # Some controllers briefly return an empty payload right after a
+        # successful power-on. Preserve the last known on/effect state instead
+        # of clobbering Home Assistant with unknown values.
+        if (
+            switch_state is None
+            and not current_effect
+            and previous.get("switch_state") == 1
+        ):
+            self._logger.warning(
+                "Device detail returned incomplete state after power-on; preserving previous coordinator state"
+            )
+            preserved = dict(previous)
+            preserved.update(
+                {
+                    "raw": data,
+                    "payload": payload,
+                    "effects": effects or previous.get("effects", []),
+                    "custom_effects": custom_effects or previous.get("custom_effects", []),
+                }
+            )
+            return preserved
 
         return {
             "raw": data,
@@ -48,5 +72,5 @@ class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "current_effect_id": current_effect_id,
             "current_effect_category": current_category,
             "brightness": brightness,
-            "switch_state": payload.get("switchState"),
+            "switch_state": switch_state,
         }
