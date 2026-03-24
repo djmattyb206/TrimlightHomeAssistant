@@ -1,2 +1,4 @@
 debug/
 debug/trimlight_debug_*.jsonl
+tools/*.local.json
+tools/*.token

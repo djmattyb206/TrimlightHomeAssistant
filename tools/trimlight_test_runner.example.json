@@ -1,0 +1,37 @@
+{
+  "ha_url": "http://homeassistant.local:8123",
+  "token_file": "tools/ha_trimlight.token",
+  "ha_share_path": "H:\\",
+  "output_dir": "debug",
+  "copy_debug_log": true,
+  "verify_ssl": true,
+  "entity_ids": {
+    "light": "light.trimlight",
+    "indicator_sensor": "sensor.trimlight_current_preset",
+    "builtin_select": "select.trimlight_built_in_preset",
+    "custom_select": "select.trimlight_custom_preset",
+    "custom_mode_select": "select.trimlight_custom_effect_mode",
+    "speed_number": "number.trimlight_effect_speed",
+    "refresh_button": "button.trimlight_refresh_presets"
+  },
+  "presets": {
+    "baseline_custom": "Easter",
+    "custom_alt": "Seahawks",
+    "custom_off_to_on": "Red White Green",
+    "builtin_primary": "Rainbow Spin",
+    "builtin_secondary": "Rainbow Comet"
+  },
+  "speed_values": {
+    "custom_low": 25,
+    "custom_high": 80,
+    "builtin_low": 20,
+    "builtin_high": 75
+  },
+  "timing_s": {
+    "capture_after_action": 2,
+    "settle_default": 15,
+    "settle_cold_start": 20,
+    "after_power_off": 5,
+    "after_refresh": 5
+  }
+}

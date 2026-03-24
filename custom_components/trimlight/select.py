@@ -149,8 +149,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
         if forced_on_override:
             last_known = self._data.last_known_builtin_preset
-            if last_known and self._data.last_selected_preset == last_known:
+            if last_known and self._data.last_known_preset == last_known:
                 return last_known
+            return None
         if data.get("current_effect_category") != 0:
             return None
         effect_id = data.get("current_effect_id")
@@ -414,6 +415,10 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             last_selected = runtime.last_selected_custom_preset
             if last_selected:
                 return last_selected
+            last_known = runtime.last_known_custom_preset
+            if last_known and runtime.last_known_preset == last_known:
+                return last_known
+            return None
         if effect_id is not None:
             for label, effect in rows:
                 if effect.get("id") == effect_id:

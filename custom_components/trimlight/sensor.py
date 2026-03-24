@@ -132,39 +132,49 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         )
         resolved_effect_id = effect_id
         resolved_custom_effect = None
-        if current_category in (1, 2):
-            if not forced_on_override:
-                resolved_custom_effect = find_custom_preset_by_state(presets, current_effect, effect_id)
-                if resolved_custom_effect is not None and resolved_custom_effect.get("id") is not None:
-                    resolved_effect_id = int(resolved_custom_effect.get("id"))
+        selected_label = None
+        if custom_state and _valid_state(custom_state.state):
+            selected_label = custom_state.state
+        elif _valid_state(runtime.last_selected_custom_preset):
+            selected_label = runtime.last_selected_custom_preset
+        elif _valid_state(runtime.last_known_custom_preset):
+            selected_label = runtime.last_known_custom_preset
 
-            if resolved_custom_effect is None:
-                selected_label = None
-                if custom_state and _valid_state(custom_state.state):
-                    selected_label = custom_state.state
-                elif _valid_state(runtime.last_selected_custom_preset):
-                    selected_label = runtime.last_selected_custom_preset
-                elif _valid_state(runtime.last_known_custom_preset):
-                    selected_label = runtime.last_known_custom_preset
+        if current_category in (1, 2) and not forced_on_override:
+            resolved_custom_effect = find_custom_preset_by_state(presets, current_effect, effect_id)
+            if resolved_custom_effect is not None and resolved_custom_effect.get("id") is not None:
+                resolved_effect_id = int(resolved_custom_effect.get("id"))
 
-                if selected_label:
-                    option_to_id = (
-                        custom_state.attributes.get("option_to_id", {}) if custom_state else {}
-                    )
-                    name_to_id = (
-                        custom_state.attributes.get("name_to_id", {}) if custom_state else {}
-                    )
-                    matched_id = option_to_id.get(selected_label)
-                    if matched_id is None:
-                        matched_id = name_to_id.get(selected_label)
-                    if matched_id is not None:
-                        matched_id = int(matched_id)
-                        resolved_custom_effect = next(
-                            (e for e in presets if e.get("id") == matched_id),
-                            None,
-                        )
-                        if resolved_custom_effect is not None:
-                            resolved_effect_id = matched_id
+        should_restore_custom = (
+            selected_label is not None
+            and (
+                current_category in (1, 2)
+                or (
+                    forced_on_override
+                    and _valid_state(runtime.last_known_custom_preset)
+                    and runtime.last_known_preset == runtime.last_known_custom_preset
+                )
+            )
+        )
+        if resolved_custom_effect is None and should_restore_custom:
+            option_to_id = (
+                custom_state.attributes.get("option_to_id", {}) if custom_state else {}
+            )
+            name_to_id = (
+                custom_state.attributes.get("name_to_id", {}) if custom_state else {}
+            )
+            matched_id = option_to_id.get(selected_label)
+            if matched_id is None:
+                matched_id = name_to_id.get(selected_label)
+            if matched_id is not None:
+                matched_id = int(matched_id)
+                resolved_custom_effect = next(
+                    (e for e in presets if e.get("id") == matched_id),
+                    None,
+                )
+                if resolved_custom_effect is not None:
+                    resolved_effect_id = matched_id
+                    current_category = 2
 
         if resolved_custom_effect is not None:
             mode = get_effect_mode(resolved_custom_effect)

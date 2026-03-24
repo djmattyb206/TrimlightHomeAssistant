@@ -253,6 +253,44 @@ action:
 
 ---
 
+## Automated Test Runner
+
+This repo includes a Windows-friendly test runner for state-based Trimlight checks:
+- `tools/trimlight_test_runner.py`
+- `tools/run_trimlight_tests.ps1`
+- `tools/trimlight_test_runner.example.json`
+
+Recommended setup:
+1. Copy `tools/trimlight_test_runner.example.json` to `tools/trimlight_test_runner.local.json`.
+2. Create a local token file such as `tools/ha_trimlight.token` and paste your Home Assistant long-lived token into it.
+3. Edit the local file with your Home Assistant URL, mapped HA share path, token file path, and your preset names.
+4. Run the suite from PowerShell:
+   - `.\tools\run_trimlight_tests.ps1`
+5. Reports are written to the local `debug/` folder.
+   - The runner also copies the latest `trimlight_debug_*.jsonl` from your mapped HA share into `debug/` when available.
+
+Useful commands:
+- List scenarios:
+  - `python .\tools\trimlight_test_runner.py --list-scenarios`
+- Run one scenario:
+  - `.\tools\run_trimlight_tests.ps1 -Scenario custom_off_to_on`
+- Run multiple scenarios:
+  - `.\tools\run_trimlight_tests.ps1 -Scenario power_baseline,builtin_from_custom`
+
+What it verifies well:
+- Home Assistant service calls
+- Entity state transitions for power, preset selection, speed changes, and sensor/select sync
+- Captured integration debug logs copied from your HA share
+
+What it does not verify by itself:
+- The actual visual look of the lights
+- Whether a built-in animation "looks right" beyond the states reported back through Home Assistant
+
+The local runner config file is ignored by Git, so you can keep your personal URL/share settings out of GitHub.
+Token files matching `tools/*.token` are also ignored by Git.
+
+---
+
 ## API Documentation
 
 The Trimlight EDGE API PDF is included here:
