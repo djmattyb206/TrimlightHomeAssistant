@@ -23,7 +23,8 @@ _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
 _CUSTOM_PRESET_POWER_ON_DELAY_SECONDS = 0.8
 _CUSTOM_PRESET_VERIFY_DELAY_SECONDS = 12.0
-_CUSTOM_PRESET_CONFIRM_RUN_DELAY_SECONDS = 0.9
+_CUSTOM_PRESET_REAPPLY_DELAY_SECONDS = _CUSTOM_PRESET_VERIFY_DELAY_SECONDS + 0.5
+_CUSTOM_PRESET_REAPPLY_VERIFY_DELAY_SECONDS = 5.0
 
 
 def _resp_code(resp: dict | None) -> int | None:
@@ -389,6 +390,83 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         )
         self.coordinator.async_set_updated_data(updated)
 
+    def _schedule_custom_reapply_if_needed(
+        self,
+        *,
+        correlation_id: str,
+        selected_label: str,
+        match: dict,
+        effect_id: int,
+        brightness: int,
+        speed: int,
+        delay_s: float = _CUSTOM_PRESET_REAPPLY_DELAY_SECONDS,
+    ) -> None:
+        data = self._data
+        handle = data.custom_reapply_handle
+        if handle:
+            handle.cancel()
+
+        async def _reapply_if_needed() -> None:
+            runtime = self._data
+            if runtime.last_selected_custom_preset != selected_label:
+                return
+
+            current = self.coordinator.data or {}
+            current_effect = current.get("current_effect") or {}
+            current_effect_id = self._safe_int(current.get("current_effect_id"))
+            presets = (current.get("custom_effects") or runtime.custom_cache)
+            inferred = find_custom_preset_by_state(presets, current_effect, current_effect_id)
+            inferred_id = self._safe_int(inferred.get("id")) if inferred is not None else None
+
+            if current_effect_id == effect_id or inferred_id == effect_id:
+                return
+
+            await async_log_event(
+                self._hass,
+                runtime,
+                "custom_preset_reapply_requested",
+                correlation_id=correlation_id,
+                coordinator_data=current,
+                selected_label=selected_label,
+                effect_id=effect_id,
+                current_effect_id=current_effect_id,
+                inferred_effect_id=inferred_id,
+            )
+            reapply_ok, reapply_resp = await _call_with_retry(
+                action=f"Custom preset delayed run_effect id={effect_id}",
+                correlation_id=correlation_id,
+                request=lambda: runtime.api.run_effect(effect_id),
+                retries=0,
+            )
+            await async_log_event(
+                self._hass,
+                runtime,
+                "custom_preset_reapply_result",
+                correlation_id=correlation_id,
+                coordinator_data=self.coordinator.data or {},
+                success=reapply_ok,
+                response=reapply_resp,
+                effect_id=effect_id,
+            )
+            if reapply_ok:
+                self._optimistic_custom_selection(
+                    selected_label=selected_label,
+                    match=match,
+                    effect_id=effect_id,
+                    brightness=brightness,
+                    speed=speed,
+                )
+                self._schedule_verification_refresh(
+                    correlation_id=correlation_id,
+                    source="custom_preset_reapply",
+                    delay_s=_CUSTOM_PRESET_REAPPLY_VERIFY_DELAY_SECONDS,
+                )
+
+        def _start_reapply() -> None:
+            self._hass.async_create_task(_reapply_if_needed())
+
+        data.custom_reapply_handle = self._hass.loop.call_later(delay_s, _start_reapply)
+
     @property
     def options(self) -> list[str]:
         data = self._data
@@ -585,26 +663,13 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                 effect_id=effect_id,
             )
             if run_ok:
-                # Some controllers acknowledge the first effect/view request
-                # but keep the previous saved preset active until the same
-                # request is sent again shortly afterward. Mirror the user's
-                # successful "pick it a second time" workaround automatically.
-                await asyncio.sleep(_CUSTOM_PRESET_CONFIRM_RUN_DELAY_SECONDS)
-                confirm_ok, confirm_resp = await _call_with_retry(
-                    action=f"Custom preset confirm run_effect id={effect_id}",
+                self._schedule_custom_reapply_if_needed(
                     correlation_id=correlation_id,
-                    request=lambda: api.run_effect(effect_id),
-                    retries=0,
-                )
-                await async_log_event(
-                    self._hass,
-                    data,
-                    "custom_preset_confirm_run_effect_result",
-                    correlation_id=correlation_id,
-                    coordinator_data=self.coordinator.data or {},
-                    success=confirm_ok,
-                    response=confirm_resp,
+                    selected_label=selected_label,
+                    match=match,
                     effect_id=effect_id,
+                    brightness=brightness,
+                    speed=speed,
                 )
         finally:
             self._schedule_verification_refresh(
