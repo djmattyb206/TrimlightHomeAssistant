@@ -22,6 +22,8 @@ _LOGGER = logging.getLogger(__name__)
 _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
 _CUSTOM_PRESET_POWER_ON_DELAY_SECONDS = 0.8
+_BUILTIN_PRESET_REAPPLY_DELAY_SECONDS = 5.5
+_BUILTIN_PRESET_REAPPLY_VERIFY_DELAY_SECONDS = 5.0
 _CUSTOM_PRESET_VERIFY_DELAY_SECONDS = 12.0
 _CUSTOM_PRESET_REAPPLY_DELAY_SECONDS = _CUSTOM_PRESET_VERIFY_DELAY_SECONDS + 0.5
 _CUSTOM_PRESET_REAPPLY_VERIFY_DELAY_SECONDS = 5.0
@@ -167,6 +169,126 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             return last_known
         return None
 
+    def _optimistic_builtin_selection(
+        self,
+        *,
+        match: dict,
+        selected_mode: int,
+        brightness: int,
+        speed: int,
+    ) -> dict:
+        data = self._data
+        data.last_selected_preset = match.get("name")
+        data.last_known_preset = match.get("name")
+        data.last_known_builtin_preset = match.get("name")
+        data.last_selected_custom_preset = None
+        data.last_selected_custom_mode = None
+
+        current_effect = {
+            "id": match.get("id", selected_mode),
+            "name": match.get("name"),
+            "category": 0,
+            "mode": selected_mode,
+            "brightness": brightness,
+            "speed": speed,
+        }
+        updated = dict(self.coordinator.data or {})
+        updated.update(
+            {
+                "switch_state": 1,
+                "current_effect": current_effect,
+                "current_effect_id": current_effect.get("id"),
+                "current_effect_category": 0,
+                "brightness": brightness,
+            }
+        )
+        self.coordinator.async_set_updated_data(updated)
+        return updated
+
+    def _schedule_builtin_reapply_if_needed(
+        self,
+        *,
+        correlation_id: str,
+        option: str,
+        match: dict,
+        selected_mode: int,
+        brightness: int,
+        speed: int,
+        delay_s: float = _BUILTIN_PRESET_REAPPLY_DELAY_SECONDS,
+    ) -> None:
+        data = self._data
+        handle = data.builtin_reapply_handle
+        if handle:
+            handle.cancel()
+
+        view_effect_id = match.get("id")
+        if view_effect_id is None:
+            return
+        view_effect_id = int(view_effect_id)
+
+        async def _reapply_if_needed() -> None:
+            runtime = self._data
+            if runtime.last_known_builtin_preset != option:
+                return
+
+            current = self.coordinator.data or {}
+            current_effect = current.get("current_effect") or {}
+            current_category = current.get("current_effect_category")
+            current_effect_id = self._safe_int(current.get("current_effect_id"))
+            current_mode = get_effect_mode(current_effect)
+            is_target_builtin = current_category == 0 and (
+                current_effect_id in (view_effect_id, selected_mode)
+                or current_mode == selected_mode
+            )
+            if is_target_builtin:
+                return
+
+            await async_log_event(
+                self._hass,
+                runtime,
+                "builtin_preset_reapply_requested",
+                correlation_id=correlation_id,
+                coordinator_data=current,
+                option=option,
+                effect_id=view_effect_id,
+                current_effect_id=current_effect_id,
+                current_mode=current_mode,
+                current_category=current_category,
+            )
+            reapply_ok, reapply_resp = await _call_with_retry(
+                action=f"Builtin preset delayed run_effect id={view_effect_id}",
+                correlation_id=correlation_id,
+                request=lambda: runtime.api.run_effect(view_effect_id),
+                retries=0,
+            )
+            await async_log_event(
+                self._hass,
+                runtime,
+                "builtin_preset_reapply_result",
+                correlation_id=correlation_id,
+                coordinator_data=self.coordinator.data or {},
+                success=reapply_ok,
+                response=reapply_resp,
+                effect_id=view_effect_id,
+            )
+            if reapply_ok:
+                self._optimistic_builtin_selection(
+                    match=match,
+                    selected_mode=selected_mode,
+                    brightness=brightness,
+                    speed=speed,
+                )
+                self._schedule_verification_refresh(
+                    correlation_id=correlation_id,
+                    source="builtin_preset_reapply",
+                    delay_s=_BUILTIN_PRESET_REAPPLY_VERIFY_DELAY_SECONDS,
+                )
+
+        def _start_reapply() -> None:
+            self._hass.async_create_task(_reapply_if_needed())
+
+        data.builtin_reapply_handle = self._hass.loop.call_later(delay_s, _start_reapply)
+
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data or {}
@@ -222,34 +344,12 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             if view_success:
                 applied_via = "view"
 
-        # Track last selected preset for sensor fallback
-        data.last_selected_preset = match.get("name")
-        data.last_known_preset = match.get("name")
-        data.last_known_builtin_preset = match.get("name")
-        # Clear custom selection context when a built-in is chosen
-        data.last_selected_custom_preset = None
-        data.last_selected_custom_mode = None
-        # Optimistic UI update: reflect built-in selection immediately so
-        # custom select clears even before coordinator refresh.
-        current_effect = {
-            "id": match.get("id", selected_mode),
-            "name": match.get("name"),
-            "category": 0,
-            "mode": selected_mode,
-            "brightness": brightness,
-            "speed": speed,
-        }
-        updated = dict(self.coordinator.data or {})
-        updated.update(
-            {
-                "switch_state": 1,
-                "current_effect": current_effect,
-                "current_effect_id": current_effect.get("id"),
-                "current_effect_category": 0,
-                "brightness": brightness,
-            }
+        updated = self._optimistic_builtin_selection(
+            match=match,
+            selected_mode=selected_mode,
+            brightness=brightness,
+            speed=speed,
         )
-        self.coordinator.async_set_updated_data(updated)
         await async_log_event(
             self._hass,
             data,
@@ -263,6 +363,15 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             preview_response=preview_resp,
             view_response=view_resp,
         )
+        if applied_via == "view" and view_effect_id is not None:
+            self._schedule_builtin_reapply_if_needed(
+                correlation_id=correlation_id,
+                option=option,
+                match=match,
+                selected_mode=selected_mode,
+                brightness=brightness,
+                speed=speed,
+            )
         self._schedule_verification_refresh(
             correlation_id=correlation_id,
             source="builtin_preset_select",
