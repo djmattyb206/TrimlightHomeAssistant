@@ -12,6 +12,35 @@ from .const import DEFAULT_POLL_INTERVAL_SECONDS
 from .effects import normalize_custom_effects, normalize_effect_mode
 
 
+def _is_placeholder_off_state(
+    *,
+    switch_state: Any,
+    current_effect: dict[str, Any],
+    current_effect_id: Any,
+    current_category: Any,
+    brightness: Any,
+) -> bool:
+    if switch_state != 0:
+        return False
+    if current_effect_id is not None:
+        return False
+    if brightness is not None:
+        return False
+    if (current_effect.get("name") or "").strip():
+        return False
+    if current_effect.get("pixels"):
+        return False
+    if current_effect.get("speed") is not None:
+        return False
+    if current_effect.get("pixelLen") is not None:
+        return False
+    if current_effect.get("reverse") is not None:
+        return False
+
+    mode = current_effect.get("mode")
+    return current_category in (None, 0) and mode in (None, 0)
+
+
 class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, api: TrimlightApi) -> None:
         self._logger = logging.getLogger(__name__)
@@ -41,16 +70,23 @@ class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         switch_state = payload.get("switchState")
 
         previous = self.data or {}
-        # Some controllers briefly return an empty payload right after a
-        # successful power-on. Preserve the last known on/effect state instead
-        # of clobbering Home Assistant with unknown values.
-        if (
-            switch_state is None
-            and not current_effect
-            and previous.get("switch_state") == 1
-        ):
+        # Some controllers briefly return an empty or placeholder off-state
+        # payload right after a successful power-on/custom apply. Preserve the
+        # last known on/effect state instead of clobbering Home Assistant with
+        # unknown or off values.
+        preserve_after_power_on = previous.get("switch_state") == 1 and (
+            (switch_state is None and not current_effect)
+            or _is_placeholder_off_state(
+                switch_state=switch_state,
+                current_effect=current_effect,
+                current_effect_id=current_effect_id,
+                current_category=current_category,
+                brightness=brightness,
+            )
+        )
+        if preserve_after_power_on:
             self._logger.warning(
-                "Device detail returned incomplete state after power-on; preserving previous coordinator state"
+                "Device detail returned placeholder state after power-on; preserving previous coordinator state"
             )
             preserved = dict(previous)
             preserved.update(
