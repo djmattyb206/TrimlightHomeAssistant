@@ -22,7 +22,7 @@ _LOGGER = logging.getLogger(__name__)
 _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
 _CUSTOM_PRESET_POWER_ON_DELAY_SECONDS = 0.8
-_CUSTOM_PRESET_COLD_START_VERIFY_DELAY_SECONDS = 12.0
+_CUSTOM_PRESET_VERIFY_DELAY_SECONDS = 12.0
 
 
 def _resp_code(resp: dict | None) -> int | None:
@@ -587,7 +587,12 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             self._schedule_verification_refresh(
                 correlation_id=correlation_id,
                 source="custom_preset_select",
-                delay_s=_CUSTOM_PRESET_COLD_START_VERIFY_DELAY_SECONDS if was_off else None,
+                # Some saved custom presets report the previous state for a few
+                # seconds after a successful effect/view call. Use the longer
+                # verification window for all custom preset selections so the
+                # first reconciliation is more likely to reflect the final
+                # controller state.
+                delay_s=_CUSTOM_PRESET_VERIFY_DELAY_SECONDS,
             )
 
 
