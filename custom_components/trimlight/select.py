@@ -23,6 +23,7 @@ _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
 _CUSTOM_PRESET_POWER_ON_DELAY_SECONDS = 0.8
 _CUSTOM_PRESET_VERIFY_DELAY_SECONDS = 12.0
+_CUSTOM_PRESET_CONFIRM_RUN_DELAY_SECONDS = 0.9
 
 
 def _resp_code(resp: dict | None) -> int | None:
@@ -583,6 +584,28 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                 response=run_resp,
                 effect_id=effect_id,
             )
+            if run_ok:
+                # Some controllers acknowledge the first effect/view request
+                # but keep the previous saved preset active until the same
+                # request is sent again shortly afterward. Mirror the user's
+                # successful "pick it a second time" workaround automatically.
+                await asyncio.sleep(_CUSTOM_PRESET_CONFIRM_RUN_DELAY_SECONDS)
+                confirm_ok, confirm_resp = await _call_with_retry(
+                    action=f"Custom preset confirm run_effect id={effect_id}",
+                    correlation_id=correlation_id,
+                    request=lambda: api.run_effect(effect_id),
+                    retries=0,
+                )
+                await async_log_event(
+                    self._hass,
+                    data,
+                    "custom_preset_confirm_run_effect_result",
+                    correlation_id=correlation_id,
+                    coordinator_data=self.coordinator.data or {},
+                    success=confirm_ok,
+                    response=confirm_resp,
+                    effect_id=effect_id,
+                )
         finally:
             self._schedule_verification_refresh(
                 correlation_id=correlation_id,
