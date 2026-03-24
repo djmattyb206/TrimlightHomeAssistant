@@ -2,3 +2,6 @@ debug/
 debug/trimlight_debug_*.jsonl
 tools/*.local.json
 tools/*.token
+__pycache__/
+*.pyc
+custom_components/trimlight/__pycache__/*.pyc

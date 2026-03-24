@@ -400,25 +400,28 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         is_on = self._is_effectively_on()
         if is_on is not True:
             return None
-        current_category = data.get("current_effect_category")
-        if current_category not in (1, 2, None):
-            return None
-        effect_id = data.get("current_effect_id")
-        current_effect = data.get("current_effect") or {}
-
         runtime = self._data
         presets = (data.get("custom_effects") or runtime.custom_cache)
         rows = self._option_entries(presets)
         raw_switch_state = data.get("switch_state")
         forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
+        remembered_custom_active = (
+            runtime.last_known_custom_preset is not None
+            and runtime.last_known_preset == runtime.last_known_custom_preset
+        )
         if forced_on_override:
             last_selected = runtime.last_selected_custom_preset
             if last_selected:
                 return last_selected
-            last_known = runtime.last_known_custom_preset
-            if last_known and runtime.last_known_preset == last_known:
-                return last_known
+            if remembered_custom_active:
+                return runtime.last_known_custom_preset
             return None
+
+        current_category = data.get("current_effect_category")
+        if current_category not in (1, 2, None):
+            return None
+        effect_id = data.get("current_effect_id")
+        current_effect = data.get("current_effect") or {}
         if effect_id is not None:
             for label, effect in rows:
                 if effect.get("id") == effect_id:
@@ -614,16 +617,36 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         last_custom = runtime.last_selected_custom_preset
         last_mode = runtime.last_selected_custom_mode
 
-        is_custom = current_category in (1, 2) or (effect_id in custom_ids) or bool(last_custom)
-        if not is_custom:
-            return None
-
         raw_switch_state = data.get("switch_state")
         forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
+        remembered_custom_active = (
+            runtime.last_known_custom_preset is not None
+            and runtime.last_known_preset == runtime.last_known_custom_preset
+        )
+
+        is_custom = (
+            current_category in (1, 2)
+            or (effect_id in custom_ids)
+            or bool(last_custom)
+            or (forced_on_override and remembered_custom_active)
+        )
+        if not is_custom:
+            return None
 
         mode = None if forced_on_override else get_effect_mode(data.get("current_effect") or {})
         if mode is None and effect_id in custom_ids:
             match = next((e for e in presets if e.get("id") == effect_id), None)
+            if match:
+                mode = get_effect_mode(match)
+        if mode is None and remembered_custom_active:
+            match = next(
+                (
+                    e
+                    for e in presets
+                    if (e.get("name") or "").strip() == runtime.last_known_custom_preset
+                ),
+                None,
+            )
             if match:
                 mode = get_effect_mode(match)
         if mode is None and last_mode is not None:
