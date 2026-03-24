@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -37,6 +38,24 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
             "manufacturer": "Trimlight",
             "model": "EDGE",
         }
+
+    def _is_effectively_on(self) -> bool | None:
+        data = self.coordinator.data or {}
+        switch_state = data.get("switch_state")
+        runtime = self._data
+        now = time.monotonic()
+
+        forced_off_until = runtime.forced_off_until
+        if forced_off_until is not None and now < forced_off_until:
+            return False
+
+        forced_on_until = runtime.forced_on_until
+        if forced_on_until is not None and now < forced_on_until:
+            return True
+
+        if switch_state is None:
+            return None
+        return int(switch_state) != 0
 
     def _schedule_verification_refresh(
         self,

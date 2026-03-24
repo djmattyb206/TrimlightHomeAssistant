@@ -16,7 +16,7 @@ from .const import CUSTOM_EFFECT_MODES, FORCED_ON_GRACE_SECONDS
 from .data import get_data
 from .debug import async_log_event
 from .entity import TrimlightEntity
-from .effects import get_effect_mode
+from .effects import find_builtin_preset, find_custom_preset_by_state, get_effect_mode
 
 _LOGGER = logging.getLogger(__name__)
 _CUSTOM_PRESET_API_RETRIES = 1
@@ -142,18 +142,23 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         data = self.coordinator.data or {}
-        switch_state = data.get("switch_state")
-        if switch_state is None or int(switch_state) == 0:
+        is_on = self._is_effectively_on()
+        if is_on is not True:
             return None
+        raw_switch_state = data.get("switch_state")
+        forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
+        if forced_on_override:
+            last_known = self._data.last_known_builtin_preset
+            if last_known and self._data.last_selected_preset == last_known:
+                return last_known
         if data.get("current_effect_category") != 0:
             return None
         effect_id = data.get("current_effect_id")
-        if effect_id is None:
-            return None
+        current_mode = get_effect_mode(data.get("current_effect") or {})
         builtins = self._data.builtins
-        for row in builtins:
-            if row.get("id") == effect_id or row.get("mode") == effect_id:
-                return row["name"]
+        match = find_builtin_preset(builtins, effect_id, current_mode)
+        if match is not None:
+            return match["name"]
         last_known = self._data.last_known_builtin_preset
         if last_known:
             return last_known
@@ -391,21 +396,36 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         data = self.coordinator.data or {}
-        switch_state = data.get("switch_state")
-        if switch_state is None or int(switch_state) == 0:
+        is_on = self._is_effectively_on()
+        if is_on is not True:
             return None
         current_category = data.get("current_effect_category")
         if current_category not in (1, 2, None):
             return None
         effect_id = data.get("current_effect_id")
+        current_effect = data.get("current_effect") or {}
 
         runtime = self._data
         presets = (data.get("custom_effects") or runtime.custom_cache)
         rows = self._option_entries(presets)
+        raw_switch_state = data.get("switch_state")
+        forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
+        if forced_on_override:
+            last_selected = runtime.last_selected_custom_preset
+            if last_selected:
+                return last_selected
         if effect_id is not None:
             for label, effect in rows:
                 if effect.get("id") == effect_id:
                     return label
+
+        inferred = find_custom_preset_by_state(presets, current_effect, effect_id)
+        if inferred is not None:
+            inferred_id = self._safe_int(inferred.get("id"))
+            if inferred_id is not None:
+                for label, effect in rows:
+                    if self._safe_int(effect.get("id")) == inferred_id:
+                        return label
 
         # If the device reports a preview (id = -1) or no match, fall back
         # to the last selected preset while the lights are on.
@@ -577,8 +597,8 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         data = self.coordinator.data or {}
-        switch_state = data.get("switch_state")
-        if switch_state is None or int(switch_state) == 0:
+        is_on = self._is_effectively_on()
+        if is_on is not True:
             return None
         runtime = self._data
         presets = (data.get("custom_effects") or runtime.custom_cache)
@@ -593,7 +613,10 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         if not is_custom:
             return None
 
-        mode = get_effect_mode(data.get("current_effect") or {})
+        raw_switch_state = data.get("switch_state")
+        forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
+
+        mode = None if forced_on_override else get_effect_mode(data.get("current_effect") or {})
         if mode is None and effect_id in custom_ids:
             match = next((e for e in presets if e.get("id") == effect_id), None)
             if match:

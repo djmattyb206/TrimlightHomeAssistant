@@ -42,6 +42,84 @@ def find_custom_preset_by_id(
     return next((e for e in presets if e.get("id") == effect_id), None)
 
 
+def _pixel_signature(pixels: Any) -> tuple[tuple[int, int, int, bool], ...] | None:
+    if not isinstance(pixels, list):
+        return None
+
+    rows: list[tuple[int, int, int, bool]] = []
+    for pixel in pixels:
+        if not isinstance(pixel, Mapping):
+            continue
+        rows.append(
+            (
+                int(pixel.get("index", 0) or 0),
+                int(pixel.get("count", 0) or 0),
+                int(pixel.get("color", 0) or 0),
+                bool(pixel.get("disable", False)),
+            )
+        )
+
+    return tuple(rows) if rows else None
+
+
+def find_custom_preset_by_state(
+    presets: Iterable[Effect],
+    current_effect: Mapping[str, Any] | None,
+    effect_id: int | None = None,
+) -> Effect | None:
+    if effect_id not in (None, -1):
+        match = find_custom_preset_by_id(presets, effect_id)
+        if match is not None:
+            return match
+
+    current_effect = current_effect or {}
+    if not current_effect:
+        return None
+
+    current_pixels = _pixel_signature(current_effect.get("pixels"))
+    current_mode = get_effect_mode(current_effect)
+    current_speed = current_effect.get("speed")
+    current_brightness = current_effect.get("brightness")
+
+    candidates = list(presets)
+
+    if current_pixels is not None:
+        pixel_matches = [e for e in candidates if _pixel_signature(e.get("pixels")) == current_pixels]
+        if len(pixel_matches) == 1:
+            return pixel_matches[0]
+        if pixel_matches:
+            candidates = pixel_matches
+
+    if current_mode is not None:
+        mode_matches = [e for e in candidates if get_effect_mode(e) == current_mode]
+        if len(mode_matches) == 1:
+            return mode_matches[0]
+        if mode_matches:
+            candidates = mode_matches
+
+    if current_speed is not None:
+        speed_matches = [
+            e for e in candidates if e.get("speed") is not None and int(e.get("speed")) == int(current_speed)
+        ]
+        if len(speed_matches) == 1:
+            return speed_matches[0]
+        if speed_matches:
+            candidates = speed_matches
+
+    if current_brightness is not None:
+        brightness_matches = [
+            e
+            for e in candidates
+            if e.get("brightness") is not None and int(e.get("brightness")) == int(current_brightness)
+        ]
+        if len(brightness_matches) == 1:
+            return brightness_matches[0]
+        if brightness_matches:
+            candidates = brightness_matches
+
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def find_builtin_preset(
     builtins: Iterable[BuiltinPreset], effect_id: int | None, effect_mode: int | None = None
 ) -> BuiltinPreset | None:

@@ -7,7 +7,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .data import get_data
 from .entity import TrimlightEntity
-from .effects import get_effect_mode
+from .effects import find_builtin_preset, find_custom_preset_by_state, get_effect_mode
 
 
 async def async_setup_entry(
@@ -28,8 +28,8 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         data = self.coordinator.data or {}
-        switch_state = data.get("switch_state")
-        if switch_state is None or int(switch_state) == 0:
+        is_on = self._is_effectively_on()
+        if is_on is not True:
             return "Off"
 
         current_effect = data.get("current_effect") or {}
@@ -45,44 +45,58 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         presets = (data.get("custom_effects") or runtime.custom_cache)
         builtins = runtime.builtins
 
-        # Prefer custom preset if currently active (category 1/2)
-        if current_category in (1, 2):
-            for e in presets:
-                if e.get("id") == effect_id:
-                    return (e.get("name") or "").strip() or "(no name)"
-            # If preview (id = -1) or no match, fall through to UI/state fallback
-            # to avoid mislabeling as a built-in.
-        elif current_category == 0:
-            # Built-in preset
-            for b in builtins:
-                if b.get("id") == effect_id or b.get("mode") == effect_id or b.get("mode") == current_mode:
-                    return b.get("name")
-        else:
-            # Category missing: try to infer by id first (custom preferred)
-            if effect_id not in (None, -1):
-                for e in presets:
-                    if e.get("id") == effect_id:
-                        return (e.get("name") or "").strip() or "(no name)"
-                for b in builtins:
-                    if b.get("id") == effect_id:
-                        return b.get("name")
-            # If mode > 16, it's definitely built-in
-            if current_mode is not None and int(current_mode) > 16:
-                for b in builtins:
-                    if b.get("mode") == current_mode:
-                        return b.get("name")
-
-        # Final fallback: use HA state of the select entities (if available)
         def _valid_state(value: str | None) -> bool:
             if value is None:
                 return False
             return value not in {"unknown", "unavailable", "none", ""}
 
         custom_state = self._hass.states.get("select.trimlight_custom_preset")
+        builtin_state = self._hass.states.get("select.trimlight_built_in_preset")
+        raw_switch_state = data.get("switch_state")
+        forced_on_override = (
+            raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
+        )
+
+        if forced_on_override:
+            if _valid_state(custom_state.state if custom_state else None):
+                return custom_state.state
+            if _valid_state(builtin_state.state if builtin_state else None):
+                return builtin_state.state
+            if _valid_state(runtime.last_selected_preset):
+                return runtime.last_selected_preset
+            if _valid_state(runtime.last_known_preset):
+                return runtime.last_known_preset
+
+        # Prefer custom preset if currently active (category 1/2)
+        if current_category in (1, 2):
+            match = find_custom_preset_by_state(presets, current_effect, effect_id)
+            if match is not None:
+                return (match.get("name") or "").strip() or "(no name)"
+            # If preview (id = -1) or no match, fall through to UI/state fallback
+            # to avoid mislabeling as a built-in.
+        elif current_category == 0:
+            # Built-in preset
+            match = find_builtin_preset(builtins, effect_id, current_mode)
+            if match is not None:
+                return match.get("name")
+        else:
+            # Category missing: try to infer by id first (custom preferred)
+            custom_match = find_custom_preset_by_state(presets, current_effect, effect_id)
+            if custom_match is not None:
+                return (custom_match.get("name") or "").strip() or "(no name)"
+            builtin_match = find_builtin_preset(builtins, effect_id, current_mode)
+            if builtin_match is not None:
+                return builtin_match.get("name")
+            # If mode > 16, it's definitely built-in
+            if current_mode is not None and int(current_mode) > 16:
+                builtin_match = find_builtin_preset(builtins, effect_id, current_mode)
+                if builtin_match is not None:
+                    return builtin_match.get("name")
+
+        # Final fallback: use HA state of the select entities (if available)
         if _valid_state(custom_state.state if custom_state else None):
             return custom_state.state
 
-        builtin_state = self._hass.states.get("select.trimlight_built_in_preset")
         if _valid_state(builtin_state.state if builtin_state else None):
             return builtin_state.state
 
@@ -112,11 +126,17 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
                 return False
             return value not in {"unknown", "unavailable", "none", ""}
 
+        raw_switch_state = data.get("switch_state")
+        forced_on_override = (
+            raw_switch_state is not None and int(raw_switch_state) == 0 and self._is_effectively_on() is True
+        )
         resolved_effect_id = effect_id
         resolved_custom_effect = None
         if current_category in (1, 2):
-            if effect_id not in (None, -1):
-                resolved_custom_effect = next((e for e in presets if e.get("id") == effect_id), None)
+            if not forced_on_override:
+                resolved_custom_effect = find_custom_preset_by_state(presets, current_effect, effect_id)
+                if resolved_custom_effect is not None and resolved_custom_effect.get("id") is not None:
+                    resolved_effect_id = int(resolved_custom_effect.get("id"))
 
             if resolved_custom_effect is None:
                 selected_label = None
