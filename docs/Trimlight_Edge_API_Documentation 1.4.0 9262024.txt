@@ -1,0 +1,789 @@
+Trimlight V2 Oauth API Documentation 
+Version  Description  Date  
+1.0.0  initial version.  2021-04-20  
+1.1.0  Add currentEffect data to the device details response data.  2021-11-22  
+1.2.0  Add group function APIs. (19 -23)  2021-12-04  
+1.2.1  Add the "sync a group" API. (24)  2021-12-08  
+1.3.0  Add the "Notify update shadow data" API. (25)  2022-08-18  
+1.4.0  1. Add "Overlay effect" API. (26) 2. Add "Update device datetime" API.(27) 3. Add APIs for backing up device data. (28 -30) 4. Add "overlayEffects" and "currentDatetime" to the device details.  2024-09-26  
+
+1. Auth 
+Each request needs to carry the following request headers 
+
+You need to follow the steps below to calculate the accessToken: 
+1. Concatenate strings: "Trimlight|<S-ClientId>|<S-Timestamp>" 
+2. Compute the HMAC-SHA256 of the string concatenated in step 1. The secret key for HMAC­SHA256 is clientSecret. 
+
+3. The value of the accessToken is the base64 encoding of the computed HMAC-SHA256 value. Please contact our business to obtain [clientId] and [clientSecret] 
+For example: clientId: tester, clientSecret: test_secret, timestamp: 1713166849256 The concatenated string is: "Trimlight|tester|1713166849256", and the base64 of HMAC-SHA256 
+value is: "z02N77XySuOwv5OSUe0vrPwprRITb656xKPulS9ooXI=", and that is the access token. 
+
+2. Base URL 
+
+
+3. Get device list 
+
+Request params: 
+
+
+Response result: 
+{ "code": 0, "desc": "success", "payload": { 
+"total": 2, "current": 1, "data": [
+ { "deviceId": "xxxxxxxxxxx1", "name": "xxxx1", "switchState": 0, "connectivity": 1, "state": 0, "fwVersionName": "1.1.1" 
+}, 
+{ "deviceId": "xxxxxxxxxxx2", "name": "xxxx2", "switchState": 0, "connectivity": 1, "state": 0, "fwVersionName": "1.1.1" 
+} ] } } 
+Response resuld code details 
+Field  Description  Type  
+code  Result code. [1]  Integer  
+desc  Result decription.  String  
+payload  Result payload.  Object  
+
+
+Page fields details 
+Field  Description  Type  
+total  Number of all devices.  Integer  
+page  The page number of the current data.  Integer  
+data  device list.  List  
+
+
+Device fields details 
+Field  Description  Type  
+deviceId  Unique ID of the device.  String  
+name  Device name.  String  
+switchState  Device switch state. 0 : light off. 1 : manual mode. 2 : timer mode.  Integer  
+connectivity  Device connectivity state. 0 : offline. 1 : online.  Integer  
+state  Device state. 0 : normal. 1 : upgrading.  Integer  
+fwVersionName  Device firmware version name.  String  
+
+
+
+4. Get device detail data 
+
+Request params: 
+
+
+Current date details 
+Field  Description  Type  
+year  Current date year. Years relative to 2000.  Integer  
+month  Current date month. Range: [1, 12].  Integer  
+day  Current date day. Range: [1, 31].  Integer  
+weekday  Current day of week. SUNDAY = 1, MONDAY = 2, TUESDAY = 3, WEDNESDAY = 4, THURSDAY = 5, FRIDAY = 6, SATURDAY = 7  Integer  
+hours  Current date year. Range: [0, 23].  Integer  
+minutes  Current date year. Range: [0, 59].  Integer  
+seconds  Current date year. Range: [0, 59].  Integer  
+
+
+Response result: 
+
+"payload": { "name": "xxxx2", "switchState": 0, "connectivity": 1, "state": 0, "colorOrder": 0, "ic": 0, "ports": [
+ { "id": 0, "start": 1, "end": 1024 
+}, 
+{ "id": 1, "start": 1, "end": 1024 
+}, 
+{ "id": 2, "start": 1, "end": 1024 
+}, 
+{ "id": 3, "start": 1, "end": 1024 
+} ], "fwVersionName": "1.1.1", "effects": [
+ { "id": 0, "name": "New Year", "category": 0, "mode": 0, "speed": 100, "brightness": 100, "pixelLen": 30, "reverse": false 
+}, 
+{ "id": 1, "name": "xxxxxxxx2", "category": 1, "mode": 0, "speed": 100, "brightness": 100, "pixels": [
+ { "index": 0, "count": 5, 
+"color": 16711680, 
+"disable": false }, { 
+"index": 1, "count": 10, "color": 65280, "disable": false 
+}, 
+{ "index": 2, "count": 10, "color": 255, "disable": false 
+} ] 
+} 
+], 
+"combinedEffect": { "effectIds": [0, 2, 3], "interval": 5 
+}, 
+"daily": [ { "id": 0, "enable": true, "effectId": 0, "repetition": 1, "startTime": { "hours": 10, "minutes": 1 }, "endTime": { "hours": 11, "minutes": 1 } }, { "id": 1, "enable": true, "effectId": 1, "repetition": 1, "startTime": { "hours": 10, "minutes": 1 }, "endTime": { 
+"hours": 11, "minutes": 1 } } ], 
+"calendar": [ { "id": 0, "effectId": 1, "startDate": { "month": 12, "day": 31 }, "endDate": { "month": 1, "day": 1 }, "startTime": { "hours": 10, "minutes": 1 }, "endTime": { "hours": 11, "minutes": 1 } }, { "id": 1, "effectId": 2, "startDate": { "month": 12, "day": 31 }, "endDate": { "month": 1, "day": 1 }, "startTime": { "hours": 10, "minutes": 1 }, "endTime": { "hours": 11, "minutes": 1 } } 
+], 
+"currentEffect": { "category": 1, "mode": 1, "speed": 174, "brightness": 204, "pixelLen": 37, "reverse": false
+ }, 
+"overlayEffects": [ { 
+
+
+4.1 Device fields details 
+Field  Description  Type  
+name  Device name.  String  
+switchState  Device switch state. 0 : light off. 1 : manual mode. 2 : timer mode.  Integer  
+connectivity  Device connectivity state. 0 : offline. 1 : online.  Integer  
+state  Device state. 0 : normal. 1 : upgrading.  Integer  
+colorOrder  Color order. [2].  Integer  
+ic  IC. [3]  Integer  
+ports  The pixel setting for each port. id: Port ID, range from 0 to 3, correspond to port1, port2, port3, port4. start: The start pixel of the port. range: [1, 2048] end: The end pixel of the port. range: [1, 2048]. "start" should not greater than "end".  List  
+fwVersionName  Device firmware version name.  String  
+effects  All the effects stored in the device.  List  
+combinedEffect  Combine effect.  Object  
+daily  Daily schedules. Each device has two daily schedules.  List  
+calendar  Calendar schedules.  List  
+currentEffect  Device current running effect. (If the device's switch state is timer mode, although the light is off at this time, it will return the last running effect data.) Note: The effect ID will be -1, when the controller is running a preview effect (not yet saved).  Object  
+overlayEffects  All overlay effects.  List  
+currentDatetime  The current date and time of the device.  Object  
+
+
+4.2 Effect fields details 
+Field  Description  Type  
+id  Effect ID. ID of the saved effect. Note that it may be -1 in currentEffect , when the controller is running a preview effect (not yet saved).  Integer  
+category  Effect category. 0 : build-in effect. 1 : custom effect.  Integer  
+mode  Effect mode. Build-in effect (category value is 0) mode range: [0, 179]. [4] Custom effect (category value is 1) mode range: [0, 16]. [5]  Integer  
+speed  Effect speed. Speed range: [0, 255].  Integer  
+brightness  Effect brightness. Brightness range: [0, 255].  Integer  
+pixelLen  Effect pixel length. (Only required for build-in effects) Pixel lenght range: [1, 90].  Integer  
+reverse  Reverse effect. (Only required for build-in effects)  Boolean  
+pixels  Custom effect pixels. (Only required for build-in effects)  List  
+
+
+4.3 Pixel fields details 
+Field  Description  Type  
+index  Custom effect pixel index.  Integer  
+count  Custom effect pixel count.  Integer  
+color  Custom effect pixel color.  Integer  
+disable  Disable pixel.  Boolean  
+
+
+4.4 Combined effect fields details 
+Field  Description  Type  
+effectIds  A list of each effects' ID in the combined effect.  List  
+interval  The interval between switching to the next effect. (Unit: minute.)  Integer  
+
+
+4.5 Daily schedule fields details 
+Field  Description  Type  
+id  Daily schedule ID. 0: daily schedule 1. 1: daily schedule 2.  List  
+enable  Enable daily schedule.  Boolean  
+effectId  Effect ID in the daily schedule.  Integer  
+repetition  The repetition of daily schedule.  Integer  
+startTime  The start time of daily schedule. See schedule time fields details.  Object  
+endTime  The end time of daily schedule. See schedule time fields details.  Object  
+
+
+4.6 Schedule Time fields details 
+Field  Description  Type  
+hours  Schedule hours, range from [1, 24].  Integer  
+minutes  Schedule minutes, range from [1, 60].  Integer  
+
+
+4.7 Calendar schedule fields details 
+Field  Description  Type  
+id  Calendar schedule ID. Schedule ID range: [0, 59]. Up to 60 calendar schedules can be saved.  List  
+effectId  Effect ID in the calendar schedule.  Integer  
+startDate  The start date of calendar schedule. See schedule date fields details.  Object  
+endDate  The end date of calendar schedule. See schedule date fields details.  Object  
+startTime  The start time in each day of calendar schedule. See schedule time fields details.  Object  
+endTime  The end time in each day of calendar schedule. See schedule time fields details.  Object  
+
+
+4.8 Schedule date fields details 
+Field  Description  Type  
+month  Schedule month, range from [1, 12].  Integer  
+day  Schedule day, range from [1, 31].  Integer  
+
+
+4.9 Effect fields details 
+Field  Description  Type  
+category  Effect category. 0 : build-in effect. 1 : custom effect.  Integer  
+mode  Effect mode. Build-in effect (category value is 0) mode range: [0, 179]. [4] Custom effect (category value is 1) mode range: [0, 16]. [5]  Integer  
+speed  Effect speed. Speed range: [0, 255].  Integer  
+brightness  Effect brightness. Brightness range: [0, 255].  Integer  
+pixelLen  Effect pixel length. (Only available for build-in effects) Pixel lenght range: [1, 90].  Integer  
+reverse  Reverse effect. (Only available for build-in effects)  Boolean  
+pixels  Custom effect pixels. (Only available for build-in effects)  List  
+
+
+4.10 Overlay effect fields details 
+Field  Description  Type  
+Overylay effect type.  
+overlayType  0 : Lightning.  Integer  
+1 : Snow.  
+targetEffect  The target effect ID.  Integer  
+
+
+Overlay Type 
+Name  Value  
+Lightning  0  
+Snow  1  
+
+
+
+5. Set device switch state 
+
+Request params: 
+
+
+Response result: 
+
+
+
+6. Set device name 
+
+Request params: 
+
+
+Response result: 
+
+
+
+7. Set device color order 
+
+Request params: 
+
+
+Response result: 
+
+
+
+8. Set device IC 
+
+Request params: 
+
+
+Response result: 
+
+
+
+9. Set device port 
+
+Request params: 
+
+
+Response result: 
+
+
+
+10. Preview build-in effect 
+
+Request params: 
+
+
+Effect fields details 
+Field  Description  Type  
+category  Effect category. 0 : build-in effect. 1 : custom effect. Here the value is 0.  Integer  
+mode  Build-in effect mode. Build-in effect mode range: [0, 179]. [4]  Integer  
+speed  Effect speed. Speed range: [0, 255].  Integer  
+brightness  Effect brightness. Brightness range: [0, 255].  Integer  
+pixelLen  Effect pixel length. Pixel lenght range: [1, 90].  Integer  
+reverse  Reverse effect.  Boolean  
+
+
+Response result: 
+
+
+Example Build-in effect 
+
+
+
+11. Preview custom effect 
+
+Request params: 
+{ "deviceId": "<device-id>", "payload": { 
+"category": 1, "mode": 0, "speed": 100, "brightness": 100, "pixels": [
+ { "index": 0, "count": 5, "color": 16711680, // (0xFF0000) "disable": false
+ },
+ { "index": 1, "count": 10, "color": 16711680, "disable": false
+ } ] } } 
+Effect fields details 
+Field  Description  Type  
+category  Effect category. 0 : build-in effect. 1 : custom effect. Here the value is 1.  Integer  
+mode  Effect mode. Custom effect mode range: [0, 16]. [5]  Integer  
+speed  Effect speed. Speed range: [0, 255].  Integer  
+brightness  Effect brightness. Brightness range: [0, 255].  Integer  
+pixels  Custom effect pixels.  List  
+
+
+Pixel fields details 
+Field  Description  Type  
+index  Custom pixel index. Index range: [0, 29].  Integer  
+count  Custom pixel count. Pixel count range: [0, 60].  Integer  
+color  Custom pixel color decimal value. eg: 0xFF0000 => 16711680.  Integer  
+disable  Custom pixel disable.  Boolean  
+
+
+Example Custom effect 
+
+"disable": false 
+ }, 
+ {  
+"index": 1,  
+"count": 2,  
+"color": 0,  
+"disable": true 
+ }, 
+ {  
+"index": 2,  
+"count": 3,  
+"color": 65280,  
+"disable": false 
+ }, 
+ {  
+"index": 2, // The same index will be overwritten  
+"count": 3,  
+"color": 16711680,  
+"disable": false 
+ } 
+ ] 
+ }  
+}  
+
+
+
+12. Add/Update effect 
+
+Request params: 
+{ "deviceId": "<device-id>", "payload": { 
+"id": -1 "name": "xxxx", "category": 1/2, "mode": 0, "speed": 100, "brightness": 100, "pixelLen": 10, "reverse": false, "pixels": [
+ { "index": 0, "count": 5, "color": 16711680, // (0xFF0000) "disable": false
+ }, 
+
+
+Effect fields details 
+Field  Description  Type  
+id  Effect ID. If ID is -1 or null, it wiil be saved as a new effect, if not, the effect corresponding to the ID will be updated. Up to 60 effects can be saved.  Integer  
+category  Effect category. 0 : build-in effect. 1 : custom effect.  Integer  
+mode  Effect mode. Custom effect mode range: [0, 16]. [5]  Integer  
+speed  Effect speed. Speed range: [0, 255].  Integer  
+brightness  Effect brightness. Brightness range: [0, 255].  Integer  
+pixelLen  Effect pixel length. Pixel lenght range: [1, 90]. (Only required for build-in effects)  Integer  
+reverse  Reverse effect. (Only required for build-in effects)  Boolean  
+pixels  Custom effect pixels. See pixel fields details. (Only required for custom effects)  List  
+
+
+Response result: 
+
+
+
+13. Check out effect 
+
+Request params: 
+
+
+Response result: 
+
+
+
+14. Delete effect 
+
+Request prams: 
+
+
+Response result: 
+
+
+
+15. Update daily schedule 
+
+Request prams: 
+{ "deviceId": "<device-id>", "payload": { 
+"id": 1, "enable": true, "effectId": 1, "repetition": 1, "startTime": { 
+"hours": 10, 
+"minutes": 1 }, "endTime": { 
+"hours": 11, 
+"minutes": 1 }, "currentDate": { 
+"month": 1, "day": 1 } } } 
+Response result: 
+
+
+16. Add/Update calendar schedule 
+
+Request prams: 
+{ "deviceId": "<device-id>", "payload": { 
+"id": 0, "effectId": 1, // The combined effect id is fixed at 200 "startDate": { 
+"month": 12, 
+"day": 31 }, "endDate": { 
+"month": 1, 
+"day": 1 }, "startTime": { 
+"hours": 10, 
+"minutes": 1 }, "endTime": { 
+"hours": 11, "minutes": 1 } } } 
+
+Response result: 
+
+
+
+17. Delete calendar schedule 
+
+Request prams: 
+
+
+Response result: 
+
+
+
+18. Set combined effect 
+
+Request prams: 
+
+
+Response result: 
+
+
+
+19. Get group list 
+
+Request params: 
+
+
+Response result: 
+{ "code": 0, "desc": "success", "payload": { 
+"total": 2, "current": 1, "data": [
+ { "groupId": "xxx", "name": "group1", "masterDevice": { 
+"deviceId": "<device_id>", 
+"name": "<device_name>" }, "devices": [
+ { "deviceId": "<device_id>", "name": "<device_name>"
+ }
+ ] }, { 
+"groupId": "xxx", "name": "group2", "masterDevice": { 
+"deviceId": "<device_id>", 
+"name": "<device_name>" }, "devices": [
+ { "deviceId": "<device_id>", "name": "<device_name>"
+ } ] } ] } } 
+
+
+20. Add a new group 
+
+Request params: 
+
+
+Response result: 
+
+
+
+21. Update a group 
+
+Request params: 
+
+
+Response result: 
+
+
+
+22. Rename a group 
+
+Request params: 
+
+
+Response result: 
+
+
+
+23. Delete a group 
+
+Request params: 
+
+
+Response result: 
+
+
+
+24. Sync a group 
+
+Request params: 
+
+
+Response result: 
+
+
+PS: The master device must be online. 
+
+
+25. Notify update shadow data 
+Before requesting detailed data for the device, you can send this request to notify the device to report the latest shadow data. 
+
+Request params: 
+
+
+Response result: 
+
+
+
+26. Update overlay effect 
+Add specific overlay effect to effects. 
+
+Request params: 
+
+If you want to remove all overlay effects, "overlayEffects" can be null or an empty list. 
+
+Overlay Type 
+Name  Value  
+Lightning  0  
+Snow  1  
+
+
+Response result: 
+
+
+
+27. Update device datetime 
+
+Request params: 
+
+
+Response result: 
+
+
+
+28. Backup device data 
+
+Request params: 
+
+
+29. Get device backup data 
+
+Request params: 
+
+Response result: 
+
+30. Restore device 
+
+Request params: 
+
+Response result: 
+
+Appendix 
+[1] Result code 
+Code  Description  
+0  Success.  
+10001  Error.  
+10002  Wrong password.  
+
+[2] Color order 
+Color order  Value  
+RGB  0  
+RBG  1  
+GRB  2  
+GBR  3  
+BRG  4  
+BGR  5  
+
+[3] IC 
+IC  Value  
+UCS1903  0  
+DMX512  1  
+
+[4] Build-in effect mode 
+Color order  Value  
+Rainbow Gradual Chase  0  
+Rainbow Comet  1  
+Rainbow Segment  2  
+Rainbow Wave  3  
+
+ 4 
+
+
+Rainbow Gradual  
+Rainbow Jump  
+Rainbow Stars  
+Rainbow Fade In Out  
+Rainbow Spin  
+Red Stacking  
+Green Stacking  
+Blue Stacking  
+Yellow Stacking  
+Cyan Stacking  
+Purple Stacking  
+White Stacking  
+Full Color Stack  
+Red to Green Stack  
+Green to Blue Stack  
+Blue to Yellow Stack  
+Yellow to Cyan Stack  
+Cyan to Purple Stack  
+Purple to White Stack  
+Red Comet  
+Green Comet  
+Blue Comet  
+Yellow Comet  
+Cyan Comet  
+Purple Comet  
+White Comet  
+Red Meteor  
+Green Meteor  
+Blue Meteor  
+
+Yellow Meteor  
+Cyan Meteor  
+Purple Meteor  
+White Meteor  
+Red Wave  
+Green Wave  
+Blue Wave  
+Yellow Wave  
+Cyan Wave  
+Purple Wave  
+White Wave  
+Red Green Wave  
+Red Blue Wave  
+Red Yellow Wave  
+Red Cyan Wave  
+Red Purple Wave  
+Red White Wave  
+Green Blue Wave  
+Green Yellow Wave  
+Green Cyan Wave  
+Green Purple Wave  
+Green White Wave  
+Blue Yellow Wave  
+Blue Cyan Wave  
+Blue Purple Wave  
+Blue White Wave  
+Yellow Cyan Wave  
+Yellow Purple Wave  
+
+
+Yellow White Wave 
+Cyan Purple Wave 
+Cyan White Wave 
+Purple White Wave 
+Red Dot Pulse 
+Green Dot Pulse 
+Blue Dot Pulse 
+Yellow Dot Pulse 
+Cyan Dot Pulse 
+Purple Dot Pulse 
+White Dot Pulse 
+Red Green Blank Pulse 
+Green Blue Blank Pulse 
+Blue Yellow Blank Pulse 
+Yellow Cyan Blank Pulse 
+Cyan Purple Blank Pulse 
+Purple White Blank Pulse 
+Red with Purple Pulse 
+Green with Cyan Pulse 
+Blue with Yellow Pulse 
+Yellow with Blue Pulse 
+Cyan with Green Pulse 
+Purple with Purple Pulse 
+Red Comet Spin 
+Green Comet Spin 
+Blue Comet Spin 
+Yellow Comet Spin 
+Cyan Comet Spin 
+Purple Comet Spin  
+White Comet Spin  
+Red Dot Spin  
+Green Dot Spin  
+Blue Dot Spin  
+Yellow Dot Spin  
+Cyan Dot Spin  
+Purple Dot Spin  
+White Dot Spin  
+Red Segment Spin  
+Green Segment Spin  
+Blue Segment Spin  
+Yellow Segment Spin  
+Cyan Segment Spin  
+Purple Segment Spin  
+White Segment Spin  
+Red Green Gradual Snake  
+Red Blue Gradual Snake  
+Red Yellow Gradual Snake  
+Red Cyan Gradual Snake  
+Red Purple Gradual Snake  
+Red White Gradual Snake  
+Green Blue Gradual Snake  
+Green Yellow Gradual Snake  
+Green Cyan Gradual Snake  
+Green Purple Gradual Snake  
+Green White Gradual Snake  
+Blue Yellow Gradual Snake  
+Blue Cyan Gradual Snake  
+
+
+Blue Purple Gradual Snake 
+Blue White Gradual Snake 
+Yellow Cyan Gradual Snake 
+Yellow Purple Gradual Snake 
+Yellow White Gradual Snake 
+Cyan Purple Gradual Snake 
+Cyan White Gradual Snake 
+Purple White Gradual Snake 
+Red White Blank Snake 
+Green White Blank Snake 
+Blue White Blank Snake 
+Yellow White Blank Snake 
+Cyan White Blank Snake 
+Purple White Blank Snake 
+Green Yellow White Snake 
+Red Green White Snake 
+Red Yellow Snake 
+Red White Snake 
+Green White Snake 
+Red Stars 
+Green Stars 
+Blue Stars 
+Yellow Stars 
+Cyan Stars 
+Purple Stars 
+White Stars 
+Red Background Stars 
+Green Background Stars 
+Blue Background Stars  
+Yellow Background Stars  
+Cyan Background Stars  
+Purple Background Stars  
+Red White Background Stars  
+Green White Background Stars  
+Blue White Background Stars  
+Yellow White Background Stars  
+Cyan White Background Stars  
+Purple White Background Stars  
+White White Background Stars  
+Red Breath  
+Green Breath  
+Blue Breath  
+Yellow Breath  
+Cyan Breath  
+Purple Breath  
+White Breath  
+Red Yellow Fire  
+Red Purple Fire  
+Green Yellow Fire  
+Green Cyan Fire  
+Blue Purple Fire  
+Blue Cyan Fire  
+Red Strobe  
+Green Strobe  
+Blue Strobe  
+Yellow Strobe  
+
+Cyan Strobe  175  
+Purple Strobe  176  
+White Strobe  177  
+Red Blue White Strobe  178  
+Full Color Strobe  179  
+
+[5] Custom effect mode 
+Color order  Value  
+STATIC  0  
+CHASE FORWARD  1  
+CHASE BACKWARD  2  
+CHASE MIDDLE TO OUT  3  
+CHASE OUT TO MIDDLE  4  
+STARS  5  
+BREATH  6  
+COMET FORWARD  7  
+COMET BACKWARD  8  
+COMET MIDDLE TO OUT  9  
+COMET OUT TO MIDDLE  10  
+WAVE FORWARD  11  
+WAVE BACKWARD  12  
+WAVE MIDDLE TO OUT  13  
+WAVE OUT TO MIDDLE  14  
+STROBE  15  
+SOLID FADE  16  
+
+[6] Repitition 
+Repitition ..  
+Today Only  0  
+Everyday  1  
+Week Days  2  
+Weekend  3  
+
+
+
+

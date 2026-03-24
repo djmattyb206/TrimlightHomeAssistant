@@ -16,7 +16,14 @@ from .const import CUSTOM_EFFECT_MODES, FORCED_ON_GRACE_SECONDS
 from .data import get_data
 from .debug import async_log_event
 from .entity import TrimlightEntity
-from .effects import find_builtin_preset, find_custom_preset_by_state, get_effect_mode
+from .effects import (
+    find_builtin_preset,
+    find_builtin_preset_by_name,
+    find_custom_preset_by_state,
+    get_effect_mode,
+    infer_builtin_preview_params,
+    is_builtin_like_state,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _CUSTOM_PRESET_API_RETRIES = 1
@@ -156,6 +163,11 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         is_on = self._is_effectively_on()
         if is_on is not True:
             return None
+        current_effect = data.get("current_effect") or {}
+        builtins = self._data.builtins
+        name_match = find_builtin_preset_by_name(builtins, (current_effect.get("name") or "").strip())
+        if name_match is not None:
+            return name_match["name"]
         raw_switch_state = data.get("switch_state")
         forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
         if forced_on_override:
@@ -163,11 +175,12 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             if last_known and self._data.last_known_preset == last_known:
                 return last_known
             return None
-        if data.get("current_effect_category") != 0:
-            return None
+        current_category = data.get("current_effect_category")
         effect_id = data.get("current_effect_id")
-        current_mode = get_effect_mode(data.get("current_effect") or {})
-        builtins = self._data.builtins
+        current_mode = get_effect_mode(current_effect)
+        builtin_like = is_builtin_like_state(builtins, current_effect, current_category, effect_id)
+        if current_category != 0 and not builtin_like:
+            return None
         match = find_builtin_preset(builtins, effect_id, current_mode)
         if match is not None:
             return match["name"]
@@ -221,6 +234,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         selected_mode: int,
         brightness: int,
         speed: int,
+        apply_via: str,
+        pixel_len: int,
+        reverse: bool,
         delay_s: float = _BUILTIN_PRESET_REAPPLY_DELAY_SECONDS,
     ) -> None:
         data = self._data
@@ -244,9 +260,16 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                 current_category = current.get("current_effect_category")
                 current_effect_id = self._safe_int(current.get("current_effect_id"))
                 current_mode = get_effect_mode(current_effect)
-                is_target_builtin = current_category == 0 and (
-                    current_effect_id in (view_effect_id, selected_mode)
-                    or current_mode == selected_mode
+                current_name = (current_effect.get("name") or "").strip()
+                current_match = find_builtin_preset_by_name(runtime.builtins, current_name)
+                if current_match is None and is_builtin_like_state(
+                    runtime.builtins, current_effect, current_category, current_effect_id
+                ):
+                    current_match = find_builtin_preset(runtime.builtins, current_effect_id, current_mode)
+                is_target_builtin = current_match is not None and (
+                    current_match.get("name") == option
+                    or current_match.get("id") in (view_effect_id, selected_mode)
+                    or current_match.get("mode") == selected_mode
                 )
                 if is_target_builtin:
                     return
@@ -263,12 +286,27 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                     current_mode=current_mode,
                     current_category=current_category,
                 )
-                reapply_ok, reapply_resp = await _call_with_retry(
-                    action=f"Builtin preset delayed run_effect id={view_effect_id}",
-                    correlation_id=correlation_id,
-                    request=lambda: runtime.api.run_effect(view_effect_id),
-                    retries=0,
-                )
+                if apply_via == "preview_category_1":
+                    reapply_ok, reapply_resp = await _call_with_retry(
+                        action=f"Builtin preset delayed preview category=1 mode={selected_mode}",
+                        correlation_id=correlation_id,
+                        request=lambda: runtime.api.preview_builtin(
+                            selected_mode,
+                            category=1,
+                            brightness=brightness,
+                            speed=speed,
+                            pixel_len=pixel_len,
+                            reverse=reverse,
+                        ),
+                        retries=0,
+                    )
+                else:
+                    reapply_ok, reapply_resp = await _call_with_retry(
+                        action=f"Builtin preset delayed run_effect id={view_effect_id}",
+                        correlation_id=correlation_id,
+                        request=lambda: runtime.api.run_effect(view_effect_id),
+                        retries=0,
+                    )
                 await async_log_event(
                     self._hass,
                     runtime,
@@ -278,6 +316,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                     success=reapply_ok,
                     response=reapply_resp,
                     effect_id=view_effect_id,
+                    applied_via=apply_via,
                 )
                 if reapply_ok:
                     self._optimistic_builtin_selection(
@@ -334,14 +373,39 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         brightness = data.last_brightness
         speed = data.last_speed
         selected_mode = int(match.get("mode", match.get("id")))
-        preview_resp = await api.preview_builtin(selected_mode, brightness=brightness, speed=speed)
+        current_effect = (self.coordinator.data or {}).get("current_effect") or {}
+        effects = (self.coordinator.data or {}).get("effects") or []
+        pixel_len, reverse = infer_builtin_preview_params(
+            int(match.get("id", selected_mode)), current_effect, effects
+        )
+        preview_resp = await api.preview_builtin(
+            selected_mode,
+            category=0,
+            brightness=brightness,
+            speed=speed,
+            pixel_len=pixel_len,
+            reverse=reverse,
+        )
         preview_code = _resp_code(preview_resp)
         preview_desc = _resp_desc(preview_resp)
         applied_via = "preview"
+        alt_preview_resp = None
         view_resp = None
         view_effect_id = match.get("id")
 
-        if preview_code not in (None, 0) and view_effect_id is not None:
+        if preview_code not in (None, 0):
+            alt_preview_resp = await api.preview_builtin(
+                selected_mode,
+                category=1,
+                brightness=brightness,
+                speed=speed,
+                pixel_len=pixel_len,
+                reverse=reverse,
+            )
+            if _resp_code(alt_preview_resp) in (None, 0):
+                applied_via = "preview_category_1"
+
+        if applied_via == "preview" and preview_code not in (None, 0) and view_effect_id is not None:
             _LOGGER.warning(
                 "Builtin preset preview rejected: cid=%s option=%s mode=%s code=%s desc=%s; falling back to effect/view id=%s",
                 correlation_id,
@@ -376,9 +440,12 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
             applied_via=applied_via,
             switch_response=switch_resp,
             preview_response=preview_resp,
+            alt_preview_response=alt_preview_resp,
             view_response=view_resp,
+            pixel_len=pixel_len,
+            reverse=reverse,
         )
-        if applied_via == "view" and view_effect_id is not None:
+        if applied_via in {"view", "preview_category_1"} and view_effect_id is not None:
             self._schedule_builtin_reapply_if_needed(
                 correlation_id=correlation_id,
                 option=option,
@@ -386,6 +453,9 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                 selected_mode=selected_mode,
                 brightness=brightness,
                 speed=speed,
+                apply_via=applied_via,
+                pixel_len=pixel_len,
+                reverse=reverse,
             )
         self._schedule_verification_refresh(
             correlation_id=correlation_id,
@@ -625,6 +695,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
             return None
         effect_id = data.get("current_effect_id")
         current_effect = data.get("current_effect") or {}
+        if is_builtin_like_state(runtime.builtins, current_effect, current_category, effect_id):
+            return None
         if effect_id is not None:
             for label, effect in rows:
                 if effect.get("id") == effect_id:
@@ -829,6 +901,7 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         presets = (data.get("custom_effects") or runtime.custom_cache)
         custom_ids = {e.get("id") for e in presets}
 
+        current_effect = data.get("current_effect") or {}
         current_category = data.get("current_effect_category")
         effect_id = data.get("current_effect_id")
         last_custom = runtime.last_selected_custom_preset
@@ -842,15 +915,18 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         )
 
         is_custom = (
-            current_category in (1, 2)
-            or (effect_id in custom_ids)
-            or bool(last_custom)
-            or (forced_on_override and remembered_custom_active)
+            not is_builtin_like_state(runtime.builtins, current_effect, current_category, effect_id)
+            and (
+                current_category in (1, 2)
+                or (effect_id in custom_ids)
+                or bool(last_custom)
+                or (forced_on_override and remembered_custom_active)
+            )
         )
         if not is_custom:
             return None
 
-        mode = None if forced_on_override else get_effect_mode(data.get("current_effect") or {})
+        mode = None if forced_on_override else get_effect_mode(current_effect)
         if mode is None and effect_id in custom_ids:
             match = next((e for e in presets if e.get("id") == effect_id), None)
             if match:

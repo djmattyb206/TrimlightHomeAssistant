@@ -7,7 +7,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .data import get_data
 from .entity import TrimlightEntity
-from .effects import find_builtin_preset, find_custom_preset_by_state, get_effect_mode
+from .effects import (
+    find_builtin_preset,
+    find_builtin_preset_by_name,
+    find_custom_preset_by_state,
+    get_effect_mode,
+    is_builtin_like_state,
+)
 
 
 async def async_setup_entry(
@@ -67,16 +73,19 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
             if _valid_state(runtime.last_known_preset):
                 return runtime.last_known_preset
 
-        # Prefer custom preset if currently active (category 1/2)
-        if current_category in (1, 2):
+        builtin_name_match = find_builtin_preset_by_name(builtins, current_name)
+        builtin_like = is_builtin_like_state(builtins, current_effect, current_category, effect_id)
+
+        # Prefer custom preset only when the controller state still looks custom.
+        if current_category in (1, 2) and not builtin_like:
             match = find_custom_preset_by_state(presets, current_effect, effect_id)
             if match is not None:
                 return (match.get("name") or "").strip() or "(no name)"
             # If preview (id = -1) or no match, fall through to UI/state fallback
             # to avoid mislabeling as a built-in.
-        elif current_category == 0:
+        elif current_category == 0 or builtin_like:
             # Built-in preset
-            match = find_builtin_preset(builtins, effect_id, current_mode)
+            match = builtin_name_match or find_builtin_preset(builtins, effect_id, current_mode)
             if match is not None:
                 return match.get("name")
         else:

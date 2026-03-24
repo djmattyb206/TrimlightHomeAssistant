@@ -133,6 +133,57 @@ def find_builtin_preset(
     return None
 
 
+def find_builtin_preset_by_name(
+    builtins: Iterable[BuiltinPreset], name: str | None
+) -> BuiltinPreset | None:
+    if not name:
+        return None
+    wanted = name.strip()
+    if not wanted:
+        return None
+    for preset in builtins:
+        if (preset.get("name") or "").strip() == wanted:
+            return preset
+    return None
+
+
+def effect_has_pixels(effect: Mapping[str, Any] | None) -> bool:
+    if not effect:
+        return False
+    pixels = effect.get("pixels")
+    return isinstance(pixels, list) and len(pixels) > 0
+
+
+def is_builtin_like_state(
+    builtins: Iterable[BuiltinPreset],
+    current_effect: Mapping[str, Any] | None,
+    current_category: int | None,
+    effect_id: int | None,
+) -> bool:
+    current_effect = current_effect or {}
+    if current_category == 0:
+        return True
+
+    current_name = (current_effect.get("name") or "").strip()
+    if find_builtin_preset_by_name(builtins, current_name) is not None:
+        return True
+
+    current_mode = get_effect_mode(current_effect)
+    builtin_match = find_builtin_preset(builtins, effect_id, current_mode)
+    if builtin_match is None:
+        return False
+
+    if current_category == 1 and not effect_has_pixels(current_effect):
+        return True
+
+    if not effect_has_pixels(current_effect) and (
+        current_effect.get("pixelLen") is not None or current_effect.get("reverse") is not None
+    ):
+        return True
+
+    return False
+
+
 def infer_builtin_preview_params(
     effect_id: int,
     current_effect: Mapping[str, Any] | None,

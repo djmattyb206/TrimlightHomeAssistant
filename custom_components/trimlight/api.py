@@ -101,6 +101,7 @@ class TrimlightApi:
         self,
         mode: int,
         *,
+        category: int = 0,
         speed: int = 100,
         brightness: int = 200,
         pixel_len: int = 30,
@@ -109,7 +110,7 @@ class TrimlightApi:
         payload = {
             "deviceId": self._creds.device_id,
             "payload": {
-                "category": 0,
+                "category": int(category),
                 "mode": int(mode),
                 "speed": int(speed),
                 "brightness": int(brightness),
