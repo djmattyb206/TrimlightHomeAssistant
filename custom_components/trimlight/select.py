@@ -138,6 +138,13 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         super().__init__(hass, entry_id, coordinator)
         self._attr_unique_id = f"{entry_id}_builtin_select"
 
+    @staticmethod
+    def _safe_int(value: object, default: int | None = None) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     @property
     def options(self) -> list[str]:
         builtins = self._data.builtins
@@ -228,60 +235,68 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
 
         async def _reapply_if_needed() -> None:
             runtime = self._data
-            if runtime.last_known_builtin_preset != option:
-                return
+            try:
+                if runtime.last_known_builtin_preset != option:
+                    return
 
-            current = self.coordinator.data or {}
-            current_effect = current.get("current_effect") or {}
-            current_category = current.get("current_effect_category")
-            current_effect_id = self._safe_int(current.get("current_effect_id"))
-            current_mode = get_effect_mode(current_effect)
-            is_target_builtin = current_category == 0 and (
-                current_effect_id in (view_effect_id, selected_mode)
-                or current_mode == selected_mode
-            )
-            if is_target_builtin:
-                return
-
-            await async_log_event(
-                self._hass,
-                runtime,
-                "builtin_preset_reapply_requested",
-                correlation_id=correlation_id,
-                coordinator_data=current,
-                option=option,
-                effect_id=view_effect_id,
-                current_effect_id=current_effect_id,
-                current_mode=current_mode,
-                current_category=current_category,
-            )
-            reapply_ok, reapply_resp = await _call_with_retry(
-                action=f"Builtin preset delayed run_effect id={view_effect_id}",
-                correlation_id=correlation_id,
-                request=lambda: runtime.api.run_effect(view_effect_id),
-                retries=0,
-            )
-            await async_log_event(
-                self._hass,
-                runtime,
-                "builtin_preset_reapply_result",
-                correlation_id=correlation_id,
-                coordinator_data=self.coordinator.data or {},
-                success=reapply_ok,
-                response=reapply_resp,
-                effect_id=view_effect_id,
-            )
-            if reapply_ok:
-                self._optimistic_builtin_selection(
-                    match=match,
-                    selected_mode=selected_mode,
-                    brightness=brightness,
-                    speed=speed,
+                current = self.coordinator.data or {}
+                current_effect = current.get("current_effect") or {}
+                current_category = current.get("current_effect_category")
+                current_effect_id = self._safe_int(current.get("current_effect_id"))
+                current_mode = get_effect_mode(current_effect)
+                is_target_builtin = current_category == 0 and (
+                    current_effect_id in (view_effect_id, selected_mode)
+                    or current_mode == selected_mode
                 )
-                self._schedule_verification_refresh(
+                if is_target_builtin:
+                    return
+
+                await async_log_event(
+                    self._hass,
+                    runtime,
+                    "builtin_preset_reapply_requested",
                     correlation_id=correlation_id,
-                    source="builtin_preset_reapply",
-                    delay_s=_BUILTIN_PRESET_REAPPLY_VERIFY_DELAY_SECONDS,
+                    coordinator_data=current,
+                    option=option,
+                    effect_id=view_effect_id,
+                    current_effect_id=current_effect_id,
+                    current_mode=current_mode,
+                    current_category=current_category,
+                )
+                reapply_ok, reapply_resp = await _call_with_retry(
+                    action=f"Builtin preset delayed run_effect id={view_effect_id}",
+                    correlation_id=correlation_id,
+                    request=lambda: runtime.api.run_effect(view_effect_id),
+                    retries=0,
+                )
+                await async_log_event(
+                    self._hass,
+                    runtime,
+                    "builtin_preset_reapply_result",
+                    correlation_id=correlation_id,
+                    coordinator_data=self.coordinator.data or {},
+                    success=reapply_ok,
+                    response=reapply_resp,
+                    effect_id=view_effect_id,
+                )
+                if reapply_ok:
+                    self._optimistic_builtin_selection(
+                        match=match,
+                        selected_mode=selected_mode,
+                        brightness=brightness,
+                        speed=speed,
+                    )
+                    self._schedule_verification_refresh(
+                        correlation_id=correlation_id,
+                        source="builtin_preset_reapply",
+                        delay_s=_BUILTIN_PRESET_REAPPLY_VERIFY_DELAY_SECONDS,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning(
+                    "Builtin preset delayed reapply failed: cid=%s option=%s error=%s",
+                    correlation_id,
+                    option,
+                    exc,
                 )
 
         def _start_reapply() -> None:
