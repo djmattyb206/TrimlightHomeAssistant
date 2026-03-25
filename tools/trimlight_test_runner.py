@@ -57,6 +57,7 @@ DEFAULT_SCENARIOS = [
     "custom_on_to_on",
     "custom_off_to_on",
     "builtin_from_custom",
+    "builtin_from_custom_retry",
     "builtin_to_builtin",
     "custom_after_builtin",
     "speed_custom",
@@ -567,6 +568,14 @@ class TrimlightTestRunner:
         builtin = self.config.presets["builtin_primary"]
         scenario["steps"].append(self.select_custom(baseline, settle_s=self.config.timing_s["settle_default"]))
         scenario["steps"].append(self.select_builtin(builtin, settle_s=self.config.timing_s["settle_default"]))
+
+    def scenario_builtin_from_custom_retry(self, scenario: dict[str, Any]) -> None:
+        baseline = self.config.presets["baseline_custom"]
+        builtin = self.config.presets["builtin_primary"]
+        settle_s = self.config.timing_s["settle_default"]
+        scenario["steps"].append(self.select_custom(baseline, settle_s=settle_s))
+        scenario["steps"].append(self.select_builtin(builtin, settle_s=settle_s))
+        scenario["steps"].append(self.select_builtin(builtin, settle_s=settle_s))
 
     def scenario_builtin_to_builtin(self, scenario: dict[str, Any]) -> None:
         primary = self.config.presets["builtin_primary"]

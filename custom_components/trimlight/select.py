@@ -30,6 +30,7 @@ _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
 _CUSTOM_PRESET_POWER_ON_DELAY_SECONDS = 0.8
 _BUILTIN_PRESET_REAPPLY_DELAY_SECONDS = 5.5
+_BUILTIN_PRESET_SECOND_REAPPLY_DELAY_SECONDS = 5.5
 _BUILTIN_PRESET_REAPPLY_VERIFY_DELAY_SECONDS = 5.0
 _CUSTOM_PRESET_VERIFY_DELAY_SECONDS = 12.0
 _CUSTOM_PRESET_REAPPLY_DELAY_SECONDS = _CUSTOM_PRESET_VERIFY_DELAY_SECONDS + 0.5
@@ -237,6 +238,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         apply_via: str,
         pixel_len: int,
         reverse: bool,
+        attempt: int = 1,
         delay_s: float = _BUILTIN_PRESET_REAPPLY_DELAY_SECONDS,
     ) -> None:
         data = self._data
@@ -285,6 +287,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                     current_effect_id=current_effect_id,
                     current_mode=current_mode,
                     current_category=current_category,
+                    attempt=attempt,
                 )
                 if apply_via == "preview_category_1":
                     reapply_ok, reapply_resp = await _call_with_retry(
@@ -317,6 +320,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                     response=reapply_resp,
                     effect_id=view_effect_id,
                     applied_via=apply_via,
+                    attempt=attempt,
                 )
                 if reapply_ok:
                     self._optimistic_builtin_selection(
@@ -330,6 +334,20 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                         source="builtin_preset_reapply",
                         delay_s=_BUILTIN_PRESET_REAPPLY_VERIFY_DELAY_SECONDS,
                     )
+                    if attempt == 1:
+                        self._schedule_builtin_reapply_if_needed(
+                            correlation_id=correlation_id,
+                            option=option,
+                            match=match,
+                            selected_mode=selected_mode,
+                            brightness=brightness,
+                            speed=speed,
+                            apply_via=apply_via,
+                            pixel_len=pixel_len,
+                            reverse=reverse,
+                            attempt=2,
+                            delay_s=_BUILTIN_PRESET_SECOND_REAPPLY_DELAY_SECONDS,
+                        )
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning(
                     "Builtin preset delayed reapply failed: cid=%s option=%s error=%s",
