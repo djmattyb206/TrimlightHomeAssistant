@@ -97,6 +97,14 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
     def _clear_pending_transition(self) -> None:
         self._data.pending_transition = None
 
+    def _cancel_pending_followups(self) -> None:
+        data = self._data
+        for attr_name in ("builtin_reapply_handle", "custom_reapply_handle", "verify_refresh_handle"):
+            handle = getattr(data, attr_name)
+            if handle is not None:
+                handle.cancel()
+                setattr(data, attr_name, None)
+
     def _keep_pending_transition_visible_after_match(
         self,
         pending: PendingTransition,

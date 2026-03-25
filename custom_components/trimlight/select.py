@@ -433,6 +433,7 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
         if not match:
             return
 
+        self._cancel_pending_followups()
         api = data.api
         correlation_id = uuid.uuid4().hex[:8]
         current = self.coordinator.data or {}
@@ -878,6 +879,7 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
         if not match:
             return
 
+        self._cancel_pending_followups()
         effect_id = match.get("id")
         if effect_id is None:
             _LOGGER.warning("Custom preset '%s' is missing id and cannot be applied", option)
