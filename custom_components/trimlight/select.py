@@ -1039,109 +1039,128 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
         super().__init__(hass, entry_id, coordinator)
         self._attr_unique_id = f"{entry_id}_custom_mode"
 
+    @staticmethod
+    def _safe_int(value: object, default: int | None = None) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     @property
     def options(self) -> list[str]:
         return [CUSTOM_EFFECT_MODES[i] for i in sorted(CUSTOM_EFFECT_MODES.keys())]
 
     @property
     def current_option(self) -> str | None:
-        data = self.coordinator.data or {}
-        is_on = self._is_effectively_on()
-        if is_on is not True:
-            return None
-        runtime = self._data
-        presets = (data.get("custom_effects") or runtime.custom_cache)
-        custom_ids = {e.get("id") for e in presets}
+        try:
+            data = self.coordinator.data or {}
+            is_on = self._is_effectively_on()
+            if is_on is not True:
+                return None
+            runtime = self._data
+            presets = (data.get("custom_effects") or runtime.custom_cache)
+            custom_ids = {self._safe_int(e.get("id")) for e in presets}
 
-        current_effect = data.get("current_effect") or {}
-        current_category = data.get("current_effect_category")
-        effect_id = self._safe_int(data.get("current_effect_id"))
-        last_custom = runtime.last_selected_custom_preset
-        last_mode = runtime.last_selected_custom_mode
-        pending = self._active_pending_transition()
-        if pending is not None:
-            if pending.target_kind == "custom":
-                if matches_custom_target(
-                    presets,
-                    current_effect,
-                    current_category,
-                    effect_id,
-                    target_name=pending.target_name,
-                    target_id=pending.target_id,
-                    builtins=runtime.builtins,
-                ):
-                    self._clear_pending_transition()
-                else:
-                    if pending.target_mode is None:
+            current_effect = data.get("current_effect") or {}
+            current_category = data.get("current_effect_category")
+            effect_id = self._safe_int(data.get("current_effect_id"))
+            last_custom = runtime.last_selected_custom_preset
+            last_mode = runtime.last_selected_custom_mode
+            pending = self._active_pending_transition()
+            if pending is not None:
+                if pending.target_kind == "custom":
+                    if matches_custom_target(
+                        presets,
+                        current_effect,
+                        current_category,
+                        effect_id,
+                        target_name=pending.target_name,
+                        target_id=pending.target_id,
+                        builtins=runtime.builtins,
+                    ):
+                        self._clear_pending_transition()
+                    else:
+                        pending_mode = self._safe_int(pending.target_mode)
+                        if pending_mode is None:
+                            return None
+                        runtime.last_selected_custom_mode = pending_mode
+                        return CUSTOM_EFFECT_MODES.get(pending_mode, str(pending_mode))
+                elif pending.target_kind == "builtin":
+                    if matches_builtin_target(
+                        runtime.builtins,
+                        current_effect,
+                        current_category,
+                        effect_id,
+                        target_name=pending.target_name,
+                        target_id=pending.target_id,
+                        target_mode=pending.target_mode,
+                    ):
+                        self._clear_pending_transition()
+                    else:
                         return None
-                    runtime.last_selected_custom_mode = int(pending.target_mode)
-                    return CUSTOM_EFFECT_MODES.get(int(pending.target_mode), str(pending.target_mode))
-            elif pending.target_kind == "builtin":
-                if matches_builtin_target(
-                    runtime.builtins,
-                    current_effect,
-                    current_category,
-                    effect_id,
-                    target_name=pending.target_name,
-                    target_id=pending.target_id,
-                    target_mode=pending.target_mode,
-                ):
-                    self._clear_pending_transition()
-                else:
-                    return None
 
-        raw_switch_state = data.get("switch_state")
-        forced_on_override = raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
-        remembered_custom_active = (
-            runtime.last_known_custom_preset is not None
-            and runtime.last_known_preset == runtime.last_known_custom_preset
-        )
-
-        is_custom = (
-            not is_builtin_like_state(runtime.builtins, current_effect, current_category, effect_id)
-            and (
-                current_category in (1, 2)
-                or (effect_id in custom_ids)
-                or bool(last_custom)
-                or (forced_on_override and remembered_custom_active)
+            raw_switch_state = self._safe_int(data.get("switch_state"))
+            forced_on_override = raw_switch_state == 0 and is_on is True
+            remembered_custom_active = (
+                runtime.last_known_custom_preset is not None
+                and runtime.last_known_preset == runtime.last_known_custom_preset
             )
-        )
-        if not is_custom:
-            return None
 
-        mode = None if forced_on_override else get_effect_mode(current_effect)
-        if mode is None and effect_id in custom_ids:
-            match = next((e for e in presets if e.get("id") == effect_id), None)
-            if match:
-                mode = get_effect_mode(match)
-        if mode is None and remembered_custom_active:
-            match = next(
-                (
-                    e
-                    for e in presets
-                    if (e.get("name") or "").strip() == runtime.last_known_custom_preset
-                ),
-                None,
+            is_custom = (
+                not is_builtin_like_state(runtime.builtins, current_effect, current_category, effect_id)
+                and (
+                    current_category in (1, 2)
+                    or (effect_id in custom_ids)
+                    or bool(last_custom)
+                    or (forced_on_override and remembered_custom_active)
+                )
             )
-            if match:
-                mode = get_effect_mode(match)
-        if mode is None and last_mode is not None:
-            mode = last_mode
+            if not is_custom:
+                return None
 
-        if mode is None:
+            mode = None if forced_on_override else get_effect_mode(current_effect)
+            if mode is None and effect_id in custom_ids:
+                match = next((e for e in presets if self._safe_int(e.get("id")) == effect_id), None)
+                if match:
+                    mode = get_effect_mode(match)
+            if mode is None and remembered_custom_active:
+                match = next(
+                    (
+                        e
+                        for e in presets
+                        if (e.get("name") or "").strip() == runtime.last_known_custom_preset
+                    ),
+                    None,
+                )
+                if match:
+                    mode = get_effect_mode(match)
+            if mode is None and last_mode is not None:
+                mode = last_mode
+
+            mode = self._safe_int(mode)
+            if mode is None:
+                return None
+
+            runtime.last_selected_custom_mode = mode
+            return CUSTOM_EFFECT_MODES.get(mode, str(mode))
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("Failed to resolve custom effect mode current option: %s", exc)
             return None
-
-        runtime.last_selected_custom_mode = int(mode)
-        return CUSTOM_EFFECT_MODES.get(int(mode), str(mode))
 
     @property
     def extra_state_attributes(self) -> dict:
-        data = self.coordinator.data or {}
-        current = get_effect_mode(data.get("current_effect") or {})
-        if current is None:
-            current = self._data.last_selected_custom_mode
-        modes = [{"id": k, "name": v} for k, v in sorted(CUSTOM_EFFECT_MODES.items())]
-        return {"current_mode_id": current, "modes": modes}
+        try:
+            data = self.coordinator.data or {}
+            current = get_effect_mode(data.get("current_effect") or {})
+            if current is None:
+                current = self._data.last_selected_custom_mode
+            current = self._safe_int(current)
+            modes = [{"id": k, "name": v} for k, v in sorted(CUSTOM_EFFECT_MODES.items())]
+            return {"current_mode_id": current, "modes": modes}
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("Failed to build custom effect mode attributes: %s", exc)
+            modes = [{"id": k, "name": v} for k, v in sorted(CUSTOM_EFFECT_MODES.items())]
+            return {"current_mode_id": None, "modes": modes}
 
     async def async_select_option(self, option: str) -> None:
         data = self._data

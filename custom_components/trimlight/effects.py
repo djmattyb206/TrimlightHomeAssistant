@@ -12,10 +12,16 @@ def get_effect_mode(effect: Mapping[str, Any] | None) -> int | None:
         return None
     mode = effect.get("mode")
     if mode is not None:
-        return int(mode)
+        try:
+            return int(mode)
+        except (TypeError, ValueError):
+            return None
     for key in _EFFECT_MODE_KEYS:
         if effect.get(key) is not None:
-            return int(effect.get(key))
+            try:
+                return int(effect.get(key))
+            except (TypeError, ValueError):
+                return None
     return None
 
 
