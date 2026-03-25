@@ -205,7 +205,8 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                     target_id=pending.target_id,
                     target_mode=pending.target_mode,
                 ):
-                    self._clear_pending_transition()
+                    if self._keep_pending_transition_visible_after_match(pending):
+                        return pending.target_name
                 else:
                     return pending.target_name
             elif pending.target_kind == "custom":
@@ -218,7 +219,8 @@ class TrimlightBuiltInSelect(TrimlightEntity, SelectEntity):
                     target_id=pending.target_id,
                     builtins=builtins,
                 ):
-                    self._clear_pending_transition()
+                    if self._keep_pending_transition_visible_after_match(pending):
+                        return None
                 else:
                     return None
         name_match = find_builtin_preset_by_name(builtins, (current_effect.get("name") or "").strip())
@@ -783,7 +785,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                     target_id=pending.target_id,
                     builtins=runtime.builtins,
                 ):
-                    self._clear_pending_transition()
+                    if self._keep_pending_transition_visible_after_match(pending):
+                        return pending.target_name
                 else:
                     return pending.target_name
             elif pending.target_kind == "builtin":
@@ -796,7 +799,8 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                     target_id=pending.target_id,
                     target_mode=pending.target_mode,
                 ):
-                    self._clear_pending_transition()
+                    if self._keep_pending_transition_visible_after_match(pending):
+                        return None
                 else:
                     return None
         raw_switch_state = data.get("switch_state")
@@ -1078,7 +1082,12 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
                         target_id=pending.target_id,
                         builtins=runtime.builtins,
                     ):
-                        self._clear_pending_transition()
+                        if self._keep_pending_transition_visible_after_match(pending):
+                            pending_mode = self._safe_int(pending.target_mode)
+                            if pending_mode is None:
+                                return None
+                            runtime.last_selected_custom_mode = pending_mode
+                            return CUSTOM_EFFECT_MODES.get(pending_mode, str(pending_mode))
                     else:
                         pending_mode = self._safe_int(pending.target_mode)
                         if pending_mode is None:
@@ -1095,7 +1104,8 @@ class TrimlightCustomModeSelect(TrimlightEntity, SelectEntity):
                         target_id=pending.target_id,
                         target_mode=pending.target_mode,
                     ):
-                        self._clear_pending_transition()
+                        if self._keep_pending_transition_visible_after_match(pending):
+                            return None
                     else:
                         return None
 

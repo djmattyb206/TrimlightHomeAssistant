@@ -24,6 +24,7 @@ class PendingTransition:
     started_monotonic: float
     expires_monotonic: float
     correlation_id: str
+    confirmed_monotonic: float | None = None
 
 
 @dataclass(slots=True)

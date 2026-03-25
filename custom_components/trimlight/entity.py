@@ -12,6 +12,7 @@ from .data import PendingTransition, TrimlightData, get_data
 from .debug import async_log_event
 
 _LOGGER = logging.getLogger(__name__)
+_PENDING_TRANSITION_STABLE_HOLD_SECONDS = 12.0
 
 
 class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
@@ -90,10 +91,27 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
             started_monotonic=now,
             expires_monotonic=now + float(expires_in_s),
             correlation_id=correlation_id,
+            confirmed_monotonic=None,
         )
 
     def _clear_pending_transition(self) -> None:
         self._data.pending_transition = None
+
+    def _keep_pending_transition_visible_after_match(
+        self,
+        pending: PendingTransition,
+        *,
+        hold_s: float = _PENDING_TRANSITION_STABLE_HOLD_SECONDS,
+    ) -> bool:
+        now = time.monotonic()
+        confirmed = pending.confirmed_monotonic
+        if confirmed is None:
+            pending.confirmed_monotonic = now
+            return True
+        if now - confirmed < float(hold_s):
+            return True
+        self._clear_pending_transition()
+        return False
 
     def _schedule_verification_refresh(
         self,
