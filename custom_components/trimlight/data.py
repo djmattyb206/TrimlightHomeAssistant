@@ -14,6 +14,19 @@ from .models import BuiltinPreset, Effect, Pixel
 
 
 @dataclass(slots=True)
+class PendingTransition:
+    target_kind: str
+    target_name: str
+    target_id: int | None
+    target_mode: int | None
+    source_kind: str | None
+    attempt: int
+    started_monotonic: float
+    expires_monotonic: float
+    correlation_id: str
+
+
+@dataclass(slots=True)
 class TrimlightData:
     api: TrimlightApi
     coordinator: TrimlightCoordinator
@@ -39,6 +52,7 @@ class TrimlightData:
     verify_refresh_handle: asyncio.TimerHandle | None = None
     builtin_reapply_handle: asyncio.TimerHandle | None = None
     custom_reapply_handle: asyncio.TimerHandle | None = None
+    pending_transition: PendingTransition | None = None
     debug_log_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 

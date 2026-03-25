@@ -13,6 +13,8 @@ from .effects import (
     find_custom_preset_by_state,
     get_effect_mode,
     is_builtin_like_state,
+    matches_builtin_target,
+    matches_custom_target,
 )
 
 
@@ -31,6 +33,13 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         super().__init__(hass, entry_id, coordinator)
         self._attr_unique_id = f"{entry_id}_current_preset"
 
+    @staticmethod
+    def _safe_int(value: object, default: int | None = None) -> int | None:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
     @property
     def native_value(self) -> str:
         data = self.coordinator.data or {}
@@ -43,13 +52,14 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         if current_name:
             return current_name
 
-        effect_id = data.get("current_effect_id")
+        effect_id = self._safe_int(data.get("current_effect_id"))
         current_category = data.get("current_effect_category")
         current_mode = get_effect_mode(current_effect)
 
         runtime = self._data
         presets = (data.get("custom_effects") or runtime.custom_cache)
         builtins = runtime.builtins
+        pending = self._active_pending_transition()
 
         def _valid_state(value: str | None) -> bool:
             if value is None:
@@ -62,6 +72,34 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         forced_on_override = (
             raw_switch_state is not None and int(raw_switch_state) == 0 and is_on is True
         )
+
+        if pending is not None:
+            if pending.target_kind == "custom":
+                if matches_custom_target(
+                    presets,
+                    current_effect,
+                    current_category,
+                    effect_id,
+                    target_name=pending.target_name,
+                    target_id=pending.target_id,
+                    builtins=builtins,
+                ):
+                    self._clear_pending_transition()
+                else:
+                    return pending.target_name
+            elif pending.target_kind == "builtin":
+                if matches_builtin_target(
+                    builtins,
+                    current_effect,
+                    current_category,
+                    effect_id,
+                    target_name=pending.target_name,
+                    target_id=pending.target_id,
+                    target_mode=pending.target_mode,
+                ):
+                    self._clear_pending_transition()
+                else:
+                    return pending.target_name
 
         if forced_on_override:
             if _valid_state(custom_state.state if custom_state else None):
@@ -124,16 +162,27 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
         data = self.coordinator.data or {}
         current_effect = data.get("current_effect") or {}
         mode = get_effect_mode(current_effect)
-        effect_id = data.get("current_effect_id")
+        effect_id = self._safe_int(data.get("current_effect_id"))
         current_category = data.get("current_effect_category")
         runtime = self._data
         presets = (data.get("custom_effects") or runtime.custom_cache)
         custom_state = self._hass.states.get("select.trimlight_custom_preset")
+        builtins = runtime.builtins
+        pending = self._active_pending_transition()
 
         def _valid_state(value: str | None) -> bool:
             if value is None:
                 return False
             return value not in {"unknown", "unavailable", "none", ""}
+
+        def _find_custom_effect_by_target(target_id: int | None, target_name: str | None) -> dict | None:
+            if target_id is not None:
+                match = next((e for e in presets if self._safe_int(e.get("id")) == target_id), None)
+                if match is not None:
+                    return match
+            if target_name:
+                return next((e for e in presets if (e.get("name") or "").strip() == target_name), None)
+            return None
 
         raw_switch_state = data.get("switch_state")
         forced_on_override = (
@@ -153,6 +202,37 @@ class TrimlightCurrentPresetSensor(TrimlightEntity, SensorEntity):
             resolved_custom_effect = find_custom_preset_by_state(presets, current_effect, effect_id)
             if resolved_custom_effect is not None and resolved_custom_effect.get("id") is not None:
                 resolved_effect_id = int(resolved_custom_effect.get("id"))
+
+        if pending is not None:
+            if pending.target_kind == "custom":
+                if matches_custom_target(
+                    presets,
+                    current_effect,
+                    current_category,
+                    effect_id,
+                    target_name=pending.target_name,
+                    target_id=pending.target_id,
+                    builtins=builtins,
+                ):
+                    self._clear_pending_transition()
+                else:
+                    pending_effect = _find_custom_effect_by_target(pending.target_id, pending.target_name)
+                    if pending_effect is not None:
+                        resolved_custom_effect = pending_effect
+                        resolved_effect_id = self._safe_int(pending_effect.get("id"))
+                        current_category = 2
+                        mode = get_effect_mode(pending_effect)
+            elif pending.target_kind == "builtin":
+                if matches_builtin_target(
+                    builtins,
+                    current_effect,
+                    current_category,
+                    effect_id,
+                    target_name=pending.target_name,
+                    target_id=pending.target_id,
+                    target_mode=pending.target_mode,
+                ):
+                    self._clear_pending_transition()
 
         should_restore_custom = (
             selected_label is not None

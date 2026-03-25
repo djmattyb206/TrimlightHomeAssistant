@@ -8,7 +8,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, VERIFY_REFRESH_DELAY_SECONDS
 from .coordinator import TrimlightCoordinator
-from .data import TrimlightData, get_data
+from .data import PendingTransition, TrimlightData, get_data
 from .debug import async_log_event
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,6 +56,44 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
         if switch_state is None:
             return None
         return int(switch_state) != 0
+
+    def _active_pending_transition(self) -> PendingTransition | None:
+        runtime = self._data
+        pending = runtime.pending_transition
+        if pending is None:
+            return None
+        if time.monotonic() >= pending.expires_monotonic:
+            runtime.pending_transition = None
+            return None
+        return pending
+
+    def _set_pending_transition(
+        self,
+        *,
+        target_kind: str,
+        target_name: str,
+        target_id: int | None,
+        target_mode: int | None,
+        source_kind: str | None,
+        correlation_id: str,
+        expires_in_s: float,
+        attempt: int = 0,
+    ) -> None:
+        now = time.monotonic()
+        self._data.pending_transition = PendingTransition(
+            target_kind=target_kind,
+            target_name=target_name,
+            target_id=target_id,
+            target_mode=target_mode,
+            source_kind=source_kind,
+            attempt=attempt,
+            started_monotonic=now,
+            expires_monotonic=now + float(expires_in_s),
+            correlation_id=correlation_id,
+        )
+
+    def _clear_pending_transition(self) -> None:
+        self._data.pending_transition = None
 
     def _schedule_verification_refresh(
         self,

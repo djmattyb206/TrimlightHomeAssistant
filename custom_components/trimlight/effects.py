@@ -184,6 +184,73 @@ def is_builtin_like_state(
     return False
 
 
+def matches_builtin_target(
+    builtins: Iterable[BuiltinPreset],
+    current_effect: Mapping[str, Any] | None,
+    current_category: int | None,
+    effect_id: int | None,
+    *,
+    target_name: str | None = None,
+    target_id: int | None = None,
+    target_mode: int | None = None,
+) -> bool:
+    current_effect = current_effect or {}
+    current_name = (current_effect.get("name") or "").strip()
+    current_mode = get_effect_mode(current_effect)
+
+    if target_name and current_name == target_name:
+        return True
+
+    if not is_builtin_like_state(builtins, current_effect, current_category, effect_id):
+        return False
+
+    match = find_builtin_preset_by_name(builtins, current_name)
+    if match is None:
+        match = find_builtin_preset(builtins, effect_id, current_mode)
+    if match is None:
+        return False
+
+    if target_name and (match.get("name") or "").strip() == target_name:
+        return True
+    if target_id is not None and match.get("id") == target_id:
+        return True
+    if target_mode is not None and match.get("mode") == target_mode:
+        return True
+    return False
+
+
+def matches_custom_target(
+    presets: Iterable[Effect],
+    current_effect: Mapping[str, Any] | None,
+    current_category: int | None,
+    effect_id: int | None,
+    *,
+    target_name: str | None = None,
+    target_id: int | None = None,
+    builtins: Iterable[BuiltinPreset] | None = None,
+) -> bool:
+    current_effect = current_effect or {}
+
+    if builtins is not None and is_builtin_like_state(builtins, current_effect, current_category, effect_id):
+        return False
+
+    if current_category not in (1, 2) and effect_id in (None, -1):
+        return False
+
+    if target_id is not None and effect_id == target_id:
+        return True
+
+    match = find_custom_preset_by_state(presets, current_effect, effect_id)
+    if match is None:
+        return False
+
+    if target_id is not None and match.get("id") == target_id:
+        return True
+    if target_name and ((match.get("name") or "").strip() == target_name):
+        return True
+    return False
+
+
 def infer_builtin_preview_params(
     effect_id: int,
     current_effect: Mapping[str, Any] | None,
