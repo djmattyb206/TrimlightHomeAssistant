@@ -48,6 +48,27 @@ def find_custom_preset_by_id(
     return next((e for e in presets if e.get("id") == effect_id), None)
 
 
+def find_custom_preset_by_name(
+    presets: Iterable[Effect], name: str | None
+) -> Effect | None:
+    if not name:
+        return None
+    wanted = name.strip()
+    if not wanted:
+        return None
+
+    direct = next((e for e in presets if (e.get("name") or "").strip() == wanted), None)
+    if direct is not None:
+        return direct
+
+    if " (id " in wanted and wanted.endswith(")"):
+        base_name = wanted.rsplit(" (id ", 1)[0].strip()
+        if base_name:
+            return next((e for e in presets if (e.get("name") or "").strip() == base_name), None)
+
+    return None
+
+
 def _pixel_signature(pixels: Any) -> tuple[tuple[int, int, int, bool], ...] | None:
     if not isinstance(pixels, list):
         return None

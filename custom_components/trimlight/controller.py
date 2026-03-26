@@ -8,6 +8,7 @@ from .debug import async_log_event
 from .effects import (
     find_builtin_preset,
     find_custom_preset_by_id,
+    find_custom_preset_by_name,
     find_custom_preset_by_state,
     get_effect_mode,
     infer_builtin_preview_params,
@@ -52,13 +53,52 @@ async def apply_effect_update(
 
     if category in (1, 2):
         presets = (coordinator_data.get("custom_effects") or data.custom_cache)
-        match = find_custom_preset_by_id(presets, effect_id)
+        match = None
+        matched_via = None
+        pending = data.pending_transition
+        if pending is not None and pending.target_kind == "custom" and pending.target_id is not None:
+            match = find_custom_preset_by_id(presets, pending.target_id)
+            if match is not None:
+                matched_via = "pending_transition"
+        if (
+            match is None
+            and data.last_selected_custom_preset
+            and data.last_selected_preset == data.last_selected_custom_preset
+        ):
+            match = find_custom_preset_by_name(presets, data.last_selected_custom_preset)
+            if match is not None:
+                matched_via = "last_selected_custom_preset"
+        if (
+            match is None
+            and data.last_known_custom_preset
+            and data.last_known_preset == data.last_known_custom_preset
+        ):
+            match = find_custom_preset_by_name(presets, data.last_known_custom_preset)
+            if match is not None:
+                matched_via = "last_known_custom_preset"
+        if match is None:
+            match = find_custom_preset_by_id(presets, effect_id)
+            if match is not None:
+                matched_via = "effect_id"
         if match is None:
             match = find_custom_preset_by_state(presets, current_effect, effect_id)
+            if match is not None:
+                matched_via = "current_state"
 
         if match:
             response = await api.preview_effect(match, brightness, speed=speed)
             if response.get("code") == 0:
+                effect_name = (match.get("name") or "").strip()
+                if effect_name:
+                    data.last_selected_preset = effect_name
+                    data.last_selected_custom_preset = effect_name
+                    data.last_known_preset = effect_name
+                    data.last_known_custom_preset = effect_name
+                mode = get_effect_mode(match)
+                if mode is not None:
+                    data.last_selected_custom_mode = mode
+                if match.get("pixels") is not None:
+                    data.last_known_custom_pixels = match.get("pixels")
                 _optimistically_apply_effect_update(
                     data,
                     coordinator_data,
@@ -74,6 +114,7 @@ async def apply_effect_update(
                 coordinator_data=coordinator_data,
                 effect_id=effect_id,
                 matched_effect_id=match.get("id"),
+                matched_via=matched_via,
                 requested_brightness=brightness,
                 requested_speed=speed,
                 response=response,

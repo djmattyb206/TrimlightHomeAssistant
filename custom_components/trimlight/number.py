@@ -45,6 +45,7 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         api = data.api
         data.last_speed = speed
 
+        self._cancel_pending_followups()
         await apply_effect_update(api, data, self.coordinator.data or {}, speed=speed)
         await async_log_event(
             self._hass,
