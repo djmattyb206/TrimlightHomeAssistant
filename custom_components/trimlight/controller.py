@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from .api import TrimlightApi
@@ -13,6 +14,8 @@ from .effects import (
     get_effect_mode,
     infer_builtin_preview_params,
 )
+
+_CUSTOM_EFFECT_UPDATE_SECOND_RUN_DELAY_SECONDS = 0.9
 
 
 def _update_custom_preset_cache(
@@ -124,6 +127,7 @@ async def apply_effect_update(
 
             response: dict[str, Any]
             run_response: dict[str, Any] | None = None
+            second_run_response: dict[str, Any] | None = None
             committed = False
             effect_match_id = int(match.get("id")) if match.get("id") is not None else effect_id
 
@@ -135,6 +139,31 @@ async def apply_effect_update(
                     if run_response.get("code") != 0:
                         response = dict(response)
                         response["_run_effect_response"] = run_response
+                    else:
+                        should_second_run = True
+                        pending = data.pending_transition
+                        if (
+                            pending is not None
+                            and pending.target_kind == "custom"
+                            and pending.target_id not in (None, effect_match_id)
+                        ):
+                            should_second_run = False
+                        latest_selected = find_custom_preset_by_name(
+                            presets, data.last_selected_custom_preset
+                        )
+                        latest_selected_id = (
+                            int(latest_selected.get("id"))
+                            if latest_selected is not None and latest_selected.get("id") is not None
+                            else None
+                        )
+                        if latest_selected_id not in (None, effect_match_id):
+                            should_second_run = False
+                        if should_second_run:
+                            await asyncio.sleep(_CUSTOM_EFFECT_UPDATE_SECOND_RUN_DELAY_SECONDS)
+                            second_run_response = await api.run_effect(effect_match_id)
+                            if second_run_response.get("code") != 0:
+                                response = dict(response)
+                                response["_second_run_effect_response"] = second_run_response
             else:
                 response = await api.preview_effect(updated_match, brightness, speed=speed)
 
@@ -173,6 +202,7 @@ async def apply_effect_update(
                 requested_speed=speed,
                 response=response,
                 run_response=run_response,
+                second_run_response=second_run_response,
                 committed=committed,
             )
             return
