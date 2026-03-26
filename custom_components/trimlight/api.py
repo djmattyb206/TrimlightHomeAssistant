@@ -180,6 +180,34 @@ class TrimlightApi:
             retry["_retry_category"] = 2
         return retry
 
+    async def save_effect(
+        self, effect: dict[str, Any], brightness: int, speed: int | None = None
+    ) -> dict[str, Any]:
+        category = effect.get("category")
+        if category is None and effect.get("pixels") is not None:
+            category = 1
+
+        payload: dict[str, Any] = {
+            "deviceId": self._creds.device_id,
+            "payload": {
+                "id": effect.get("id"),
+                "name": effect.get("name"),
+                "category": category,
+                "mode": effect.get("mode"),
+                "speed": int(effect.get("speed", 0)) if speed is None else int(speed),
+                "brightness": int(brightness),
+            },
+        }
+
+        if "pixels" in effect:
+            payload["payload"]["pixels"] = effect.get("pixels")
+        if "pixelLen" in effect:
+            payload["payload"]["pixelLen"] = effect.get("pixelLen")
+        if "reverse" in effect:
+            payload["payload"]["reverse"] = effect.get("reverse")
+
+        return await self._request("POST", "/v1/oauth/resources/device/effect/save", payload=payload)
+
     async def run_effect(self, effect_id: int) -> dict[str, Any]:
         payload = {"deviceId": self._creds.device_id, "payload": {"id": int(effect_id)}}
         return await self._request("POST", "/v1/oauth/resources/device/effect/view", payload=payload)

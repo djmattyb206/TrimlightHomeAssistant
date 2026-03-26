@@ -31,6 +31,7 @@ _LOGGER = logging.getLogger(__name__)
 _CUSTOM_PRESET_API_RETRIES = 1
 _CUSTOM_PRESET_RETRY_DELAY_SECONDS = 0.35
 _CUSTOM_PRESET_POWER_ON_DELAY_SECONDS = 0.8
+_CUSTOM_PRESET_SECOND_RUN_DELAY_SECONDS = 0.9
 _BUILTIN_PRESET_REAPPLY_DELAY_SECONDS = 5.5
 _BUILTIN_PRESET_SECOND_REAPPLY_DELAY_SECONDS = 5.5
 _BUILTIN_PRESET_REAPPLY_VERIFY_DELAY_SECONDS = 5.0
@@ -1009,6 +1010,24 @@ class TrimlightCustomSelect(TrimlightEntity, SelectEntity):
                 effect_id=effect_id,
             )
             if run_ok:
+                await asyncio.sleep(_CUSTOM_PRESET_SECOND_RUN_DELAY_SECONDS)
+                if self._data.last_selected_custom_preset == selected_label:
+                    second_run_ok, second_run_resp = await _call_with_retry(
+                        action=f"Custom preset second run_effect id={effect_id}",
+                        correlation_id=correlation_id,
+                        request=lambda: api.run_effect(effect_id),
+                        retries=0,
+                    )
+                    await async_log_event(
+                        self._hass,
+                        data,
+                        "custom_preset_second_run_effect_result",
+                        correlation_id=correlation_id,
+                        coordinator_data=self.coordinator.data or {},
+                        success=second_run_ok,
+                        response=second_run_resp,
+                        effect_id=effect_id,
+                    )
                 self._schedule_custom_reapply_if_needed(
                     correlation_id=correlation_id,
                     selected_label=selected_label,

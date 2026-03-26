@@ -15,6 +15,38 @@ from .effects import (
 )
 
 
+def _update_custom_preset_cache(
+    data: TrimlightData,
+    coordinator_data: dict[str, Any],
+    effect: dict[str, Any],
+) -> None:
+    effect_id = effect.get("id")
+    if effect_id is None:
+        return
+
+    updated_effect = dict(effect)
+    replaced = False
+    new_cache: list[dict[str, Any]] = []
+    for row in data.custom_cache:
+        if row.get("id") == effect_id:
+            new_cache.append(updated_effect)
+            replaced = True
+        else:
+            new_cache.append(row)
+    if replaced:
+        data.custom_cache = new_cache
+
+    custom_effects = coordinator_data.get("custom_effects")
+    if isinstance(custom_effects, list):
+        updated_rows: list[dict[str, Any]] = []
+        for row in custom_effects:
+            if isinstance(row, dict) and row.get("id") == effect_id:
+                updated_rows.append(updated_effect)
+            else:
+                updated_rows.append(row)
+        coordinator_data["custom_effects"] = updated_rows
+
+
 def _optimistically_apply_effect_update(
     data: TrimlightData,
     coordinator_data: dict[str, Any],
@@ -86,8 +118,27 @@ async def apply_effect_update(
                 matched_via = "current_state"
 
         if match:
-            response = await api.preview_effect(match, brightness, speed=speed)
-            if response.get("code") == 0:
+            updated_match = dict(match)
+            updated_match["brightness"] = int(brightness)
+            updated_match["speed"] = int(speed)
+
+            response: dict[str, Any]
+            run_response: dict[str, Any] | None = None
+            committed = False
+            effect_match_id = int(match.get("id")) if match.get("id") is not None else effect_id
+
+            if data.commit_custom_preset and effect_match_id is not None:
+                response = await api.save_effect(updated_match, brightness, speed=speed)
+                if response.get("code") == 0:
+                    committed = True
+                    run_response = await api.run_effect(effect_match_id)
+                    if run_response.get("code") != 0:
+                        response = dict(response)
+                        response["_run_effect_response"] = run_response
+            else:
+                response = await api.preview_effect(updated_match, brightness, speed=speed)
+
+            if response.get("code") == 0 and (run_response is None or run_response.get("code") == 0):
                 effect_name = (match.get("name") or "").strip()
                 if effect_name:
                     data.last_selected_preset = effect_name
@@ -97,20 +148,23 @@ async def apply_effect_update(
                 mode = get_effect_mode(match)
                 if mode is not None:
                     data.last_selected_custom_mode = mode
-                if match.get("pixels") is not None:
-                    data.last_known_custom_pixels = match.get("pixels")
+                if updated_match.get("pixels") is not None:
+                    data.last_known_custom_pixels = updated_match.get("pixels")
+                if committed:
+                    _update_custom_preset_cache(data, coordinator_data, updated_match)
                 _optimistically_apply_effect_update(
                     data,
                     coordinator_data,
-                    dict(match),
-                    effect_id=int(match.get("id")) if match.get("id") is not None else effect_id,
+                    updated_match,
+                    effect_id=effect_match_id,
                     brightness=brightness,
                     speed=speed,
                 )
+            event_name = "effect_update_save_custom" if committed else "effect_update_preview_custom"
             await async_log_event(
                 data.coordinator.hass,
                 data,
-                "effect_update_preview_custom",
+                event_name,
                 coordinator_data=coordinator_data,
                 effect_id=effect_id,
                 matched_effect_id=match.get("id"),
@@ -118,6 +172,8 @@ async def apply_effect_update(
                 requested_brightness=brightness,
                 requested_speed=speed,
                 response=response,
+                run_response=run_response,
+                committed=committed,
             )
             return
 
