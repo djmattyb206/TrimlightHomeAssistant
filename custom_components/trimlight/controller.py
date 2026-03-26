@@ -8,9 +8,31 @@ from .debug import async_log_event
 from .effects import (
     find_builtin_preset,
     find_custom_preset_by_id,
+    find_custom_preset_by_state,
     get_effect_mode,
     infer_builtin_preview_params,
 )
+
+
+def _optimistically_apply_effect_update(
+    data: TrimlightData,
+    coordinator_data: dict[str, Any],
+    effect: dict[str, Any],
+    *,
+    effect_id: int | None,
+    brightness: int,
+    speed: int,
+) -> None:
+    updated = dict(coordinator_data or {})
+    current = dict(updated.get("current_effect") or {})
+    current.update(effect)
+    current["brightness"] = int(brightness)
+    current["speed"] = int(speed)
+    updated["current_effect"] = current
+    updated["brightness"] = int(brightness)
+    updated["current_effect_category"] = current.get("category", updated.get("current_effect_category"))
+    updated["current_effect_id"] = effect_id if effect_id is not None else updated.get("current_effect_id")
+    data.coordinator.async_set_updated_data(updated)
 
 
 async def apply_effect_update(
@@ -25,8 +47,50 @@ async def apply_effect_update(
     speed = data.last_speed if speed is None else int(speed)
 
     current_effect = (coordinator_data or {}).get("current_effect") or {}
+    effect_id = (coordinator_data or {}).get("current_effect_id")
+    category = (coordinator_data or {}).get("current_effect_category")
+
+    if category in (1, 2):
+        presets = (coordinator_data.get("custom_effects") or data.custom_cache)
+        match = find_custom_preset_by_id(presets, effect_id)
+        if match is None:
+            match = find_custom_preset_by_state(presets, current_effect, effect_id)
+
+        if match:
+            response = await api.preview_effect(match, brightness, speed=speed)
+            if response.get("code") == 0:
+                _optimistically_apply_effect_update(
+                    data,
+                    coordinator_data,
+                    dict(match),
+                    effect_id=int(match.get("id")) if match.get("id") is not None else effect_id,
+                    brightness=brightness,
+                    speed=speed,
+                )
+            await async_log_event(
+                data.coordinator.hass,
+                data,
+                "effect_update_preview_custom",
+                coordinator_data=coordinator_data,
+                effect_id=effect_id,
+                matched_effect_id=match.get("id"),
+                requested_brightness=brightness,
+                requested_speed=speed,
+                response=response,
+            )
+            return
+
     if current_effect:
         response = await api.preview_effect(current_effect, brightness, speed=speed)
+        if response.get("code") == 0:
+            _optimistically_apply_effect_update(
+                data,
+                coordinator_data,
+                dict(current_effect),
+                effect_id=effect_id,
+                brightness=brightness,
+                speed=speed,
+            )
         await async_log_event(
             data.coordinator.hass,
             data,
@@ -38,8 +102,6 @@ async def apply_effect_update(
         )
         return
 
-    effect_id = (coordinator_data or {}).get("current_effect_id")
-    category = (coordinator_data or {}).get("current_effect_category")
     if effect_id is None or category is None:
         await async_log_event(
             data.coordinator.hass,
@@ -103,6 +165,23 @@ async def apply_effect_update(
             pixel_len=pixel_len,
             reverse=reverse,
         )
+        if response.get("code") == 0:
+            builtin_effect = {
+                "category": 0,
+                "mode": match.get("mode", match.get("id")),
+                "speed": speed,
+                "brightness": brightness,
+                "pixelLen": pixel_len,
+                "reverse": reverse,
+            }
+            _optimistically_apply_effect_update(
+                data,
+                coordinator_data,
+                builtin_effect,
+                effect_id=effect_id,
+                brightness=brightness,
+                speed=speed,
+            )
         await async_log_event(
             data.coordinator.hass,
             data,

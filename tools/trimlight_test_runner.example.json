@@ -17,6 +17,7 @@
   "presets": {
     "baseline_custom": "Easter",
     "custom_alt": "Seahawks",
+    "custom_speed": "Seahawks",
     "custom_off_to_on": "Red White Green",
     "builtin_primary": "Rainbow Spin",
     "builtin_secondary": "Rainbow Comet"

@@ -31,6 +31,7 @@ DEFAULT_ENTITY_IDS = {
 DEFAULT_PRESETS = {
     "baseline_custom": "Easter",
     "custom_alt": "Seahawks",
+    "custom_speed": "Seahawks",
     "custom_off_to_on": "Red White Green",
     "builtin_primary": "Rainbow Spin",
     "builtin_secondary": "Rainbow Comet",
@@ -590,19 +591,19 @@ class TrimlightTestRunner:
         scenario["steps"].append(self.select_custom(baseline, settle_s=self.config.timing_s["settle_default"]))
 
     def scenario_speed_custom(self, scenario: dict[str, Any]) -> None:
-        baseline = self.config.presets["baseline_custom"]
-        scenario["steps"].append(self.select_custom(baseline, settle_s=self.config.timing_s["settle_default"]))
+        custom_speed = self.config.presets.get("custom_speed") or self.config.presets["custom_alt"]
+        scenario["steps"].append(self.select_custom(custom_speed, settle_s=self.config.timing_s["settle_default"]))
         scenario["steps"].append(
             self.set_speed(
                 self.config.speed_values["custom_low"],
-                expected_preset=baseline,
+                expected_preset=custom_speed,
                 preset_kind="custom",
             )
         )
         scenario["steps"].append(
             self.set_speed(
                 self.config.speed_values["custom_high"],
-                expected_preset=baseline,
+                expected_preset=custom_speed,
                 preset_kind="custom",
             )
         )
