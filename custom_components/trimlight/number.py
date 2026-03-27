@@ -79,6 +79,35 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         builtins = runtime.builtins
         custom_presets = data.get("custom_effects") or runtime.custom_cache
 
+        # Built-in speed changes can trigger a stale refresh that briefly looks like
+        # the last known custom preset. When we know the last active selection was a
+        # built-in, keep following that target instead of pivoting into the custom
+        # fallback path mid-transition.
+        builtin_hint_names: list[str] = []
+        if runtime.last_selected_custom_preset is None:
+            if runtime.last_selected_preset:
+                builtin_hint_names.append(runtime.last_selected_preset)
+            if runtime.last_known_builtin_preset:
+                builtin_hint_names.append(runtime.last_known_builtin_preset)
+
+        for builtin_name in builtin_hint_names:
+            builtin_match = find_builtin_preset_by_name(builtins, builtin_name)
+            if builtin_match is None:
+                continue
+            builtin_name = (builtin_match.get("name") or "").strip()
+            builtin_id = self._safe_int(builtin_match.get("id"))
+            builtin_mode = self._safe_int(builtin_match.get("mode"))
+            self._set_pending_transition(
+                target_kind="builtin",
+                target_name=builtin_name,
+                target_id=builtin_id,
+                target_mode=builtin_mode,
+                source_kind="builtin",
+                correlation_id="speed_update",
+                expires_in_s=_SPEED_UPDATE_PENDING_EXPIRY_SECONDS,
+            )
+            return
+
         if not is_builtin_like_state(builtins, current_effect, current_category, effect_id):
             custom_match = None
             if effect_id is not None:
