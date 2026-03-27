@@ -36,9 +36,10 @@ def _is_placeholder_off_state(
         return False
     if current_effect.get("reverse") is not None:
         return False
-
-    mode = current_effect.get("mode")
-    return current_category in (None, 0) and mode in (None, 0)
+    # Some controllers return garbage category/mode integers in an otherwise
+    # empty off payload right after a successful power-on/custom apply. Treat
+    # that as a placeholder state as long as there is no actual effect content.
+    return True
 
 
 class TrimlightCoordinator(DataUpdateCoordinator[dict[str, Any]]):

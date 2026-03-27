@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
@@ -34,24 +33,7 @@ class TrimlightLight(TrimlightEntity, LightEntity):
 
     @property
     def is_on(self) -> bool | None:
-        switch_state = (self.coordinator.data or {}).get("switch_state")
-        if switch_state is None:
-            return None
-        if int(switch_state) != 0:
-            # Clear any grace window once the device reports on.
-            data = self._data
-            data.forced_on_until = None
-            forced_off_until = data.forced_off_until
-            if forced_off_until is not None and time.monotonic() < forced_off_until:
-                return False
-            return True
-        # Device reports off: clear forced-off grace window
-        data = self._data
-        data.forced_off_until = None
-        forced_on_until = data.forced_on_until
-        if forced_on_until is not None and time.monotonic() < forced_on_until:
-            return True
-        return False
+        return self._is_effectively_on()
 
     @property
     def brightness(self) -> int | None:
@@ -97,6 +79,8 @@ class TrimlightLight(TrimlightEntity, LightEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         data = self._data
         api = data.api
+        self._cancel_pending_followups()
+        self._clear_pending_transition()
         switch_resp = await api.set_switch_state(0)
         coord_data = self.coordinator.data or {}
         optimistic = dict(coord_data)

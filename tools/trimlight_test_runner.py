@@ -548,7 +548,13 @@ class TrimlightTestRunner:
 
     def scenario_power_baseline(self, scenario: dict[str, Any]) -> None:
         baseline = self.config.presets["baseline_custom"]
-        scenario["steps"].append(self.select_custom(baseline, settle_s=self.config.timing_s["settle_default"]))
+        starting_snapshot = self.capture_snapshot()
+        baseline_settle_s = (
+            self.config.timing_s["settle_cold_start"]
+            if self.state_value(starting_snapshot, "light") == "off"
+            else self.config.timing_s["settle_default"]
+        )
+        scenario["steps"].append(self.select_custom(baseline, settle_s=baseline_settle_s))
         scenario["steps"].append(self.turn_off())
         scenario["steps"].append(self.turn_on_expect_custom(baseline))
 
@@ -562,6 +568,7 @@ class TrimlightTestRunner:
     def scenario_custom_off_to_on(self, scenario: dict[str, Any]) -> None:
         option = self.config.presets["custom_off_to_on"]
         scenario["steps"].append(self.turn_off())
+        self.sleep(1.0)
         scenario["steps"].append(self.select_custom(option, settle_s=self.config.timing_s["settle_cold_start"]))
 
     def scenario_builtin_from_custom(self, scenario: dict[str, Any]) -> None:

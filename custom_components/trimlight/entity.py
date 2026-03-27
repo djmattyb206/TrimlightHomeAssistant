@@ -54,6 +54,15 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
         if forced_on_until is not None and now < forced_on_until:
             return True
 
+        pending_transition = self._active_pending_transition()
+        pending_speed_active = self._has_active_pending_speed()
+        if (
+            switch_state in (None, 0)
+            and (pending_transition is not None or pending_speed_active)
+            and self._has_meaningful_effect_state()
+        ):
+            return True
+
         if switch_state is None:
             return None
         return int(switch_state) != 0
@@ -96,6 +105,47 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
 
     def _clear_pending_transition(self) -> None:
         self._data.pending_transition = None
+
+    def _has_active_pending_speed(self) -> bool:
+        runtime = self._data
+        pending_speed = runtime.pending_speed
+        pending_until = runtime.pending_speed_until
+        if pending_speed is None or pending_until is None:
+            return False
+        if time.monotonic() >= pending_until:
+            runtime.pending_speed = None
+            runtime.pending_speed_until = None
+            return False
+        return True
+
+    def _has_meaningful_effect_state(self) -> bool:
+        data = self.coordinator.data or {}
+        current_effect = data.get("current_effect") or {}
+        pixels = current_effect.get("pixels")
+        if isinstance(pixels, list) and len(pixels) > 0:
+            return True
+        if any(
+            current_effect.get(key) is not None
+            for key in ("id", "name", "category", "mode", "speed", "brightness", "pixelLen", "reverse")
+        ):
+            return True
+        if any(
+            data.get(key) is not None
+            for key in (
+                "current_effect_id",
+                "current_effect_category",
+                "current_effect_mode",
+                "current_effect_speed",
+                "current_effect_brightness",
+                "current_effect_pixel_len",
+                "current_effect_reverse",
+            )
+        ):
+            return True
+        pixels = data.get("current_effect_pixels")
+        if isinstance(pixels, list) and len(pixels) > 0:
+            return True
+        return bool(self._data.last_selected_preset or self._data.last_known_preset)
 
     def _cancel_pending_followups(self) -> None:
         data = self._data
