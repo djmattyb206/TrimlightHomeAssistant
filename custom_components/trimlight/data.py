@@ -53,7 +53,10 @@ class TrimlightData:
     verify_refresh_handle: asyncio.TimerHandle | None = None
     builtin_reapply_handle: asyncio.TimerHandle | None = None
     custom_reapply_handle: asyncio.TimerHandle | None = None
+    speed_reapply_handle: asyncio.TimerHandle | None = None
     pending_transition: PendingTransition | None = None
+    pending_speed: int | None = None
+    pending_speed_until: float | None = None
     debug_log_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 

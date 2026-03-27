@@ -99,7 +99,12 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
 
     def _cancel_pending_followups(self) -> None:
         data = self._data
-        for attr_name in ("builtin_reapply_handle", "custom_reapply_handle", "verify_refresh_handle"):
+        for attr_name in (
+            "builtin_reapply_handle",
+            "custom_reapply_handle",
+            "speed_reapply_handle",
+            "verify_refresh_handle",
+        ):
             handle = getattr(data, attr_name)
             if handle is not None:
                 handle.cancel()

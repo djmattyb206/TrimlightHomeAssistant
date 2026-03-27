@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
@@ -22,6 +23,9 @@ from .effects import (
 )
 
 _CUSTOM_SPEED_SECOND_APPLY_DELAY_SECONDS = 0.9
+_CUSTOM_SPEED_REAPPLY_DELAY_SECONDS = 4.5
+_CUSTOM_SPEED_REAPPLY_VERIFY_DELAY_SECONDS = 4.0
+_PENDING_SPEED_HOLD_SECONDS = 12.0
 _SPEED_UPDATE_PENDING_EXPIRY_SECONDS = 15.0
 
 
@@ -120,8 +124,98 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
                 expires_in_s=_SPEED_UPDATE_PENDING_EXPIRY_SECONDS,
             )
 
+    def _set_pending_speed(self, speed: int) -> None:
+        data = self._data
+        data.pending_speed = int(speed)
+        data.pending_speed_until = time.monotonic() + _PENDING_SPEED_HOLD_SECONDS
+
+    def _clear_pending_speed(self) -> None:
+        data = self._data
+        data.pending_speed = None
+        data.pending_speed_until = None
+
+    def _active_pending_speed(self) -> int | None:
+        data = self._data
+        pending_speed = data.pending_speed
+        pending_until = data.pending_speed_until
+        if pending_speed is None or pending_until is None:
+            return None
+        if time.monotonic() >= pending_until:
+            self._clear_pending_speed()
+            return None
+        return int(pending_speed)
+
+    def _schedule_custom_speed_reapply_if_needed(
+        self,
+        *,
+        requested_percent: float,
+        device_speed: int,
+        target_name: str | None,
+        target_id: int | None,
+        delay_s: float = _CUSTOM_SPEED_REAPPLY_DELAY_SECONDS,
+    ) -> None:
+        data = self._data
+        handle = data.speed_reapply_handle
+        if handle is not None:
+            handle.cancel()
+
+        async def _reapply_if_needed() -> None:
+            runtime = self._data
+            if runtime.last_speed != int(device_speed):
+                return
+
+            pending = self._active_pending_transition()
+            if pending is not None and pending.target_kind != "custom":
+                return
+            if pending is not None:
+                if target_name is not None and pending.target_name != target_name:
+                    return
+                if target_id is not None and pending.target_id not in (None, target_id):
+                    return
+
+            current = self.coordinator.data or {}
+            current_effect = current.get("current_effect") or {}
+            current_speed = self._safe_int(current_effect.get("speed"))
+            if current_speed == int(device_speed):
+                return
+
+            await async_log_event(
+                self._hass,
+                runtime,
+                "effect_speed_reapply_requested",
+                coordinator_data=current,
+                requested_percent=float(requested_percent),
+                device_speed=int(device_speed),
+                target_name=target_name,
+                target_id=target_id,
+                current_speed=current_speed,
+            )
+            await apply_effect_update(runtime.api, runtime, current, speed=int(device_speed))
+            await async_log_event(
+                self._hass,
+                runtime,
+                "effect_speed_reapply_result",
+                coordinator_data=self.coordinator.data or {},
+                requested_percent=float(requested_percent),
+                device_speed=int(device_speed),
+                target_name=target_name,
+                target_id=target_id,
+            )
+            self._schedule_verification_refresh(
+                source="effect_speed_reapply",
+                delay_s=_CUSTOM_SPEED_REAPPLY_VERIFY_DELAY_SECONDS,
+            )
+
+        def _start_reapply() -> None:
+            self._hass.async_create_task(_reapply_if_needed())
+
+        data.speed_reapply_handle = self._hass.loop.call_later(delay_s, _start_reapply)
+
     @property
     def native_value(self) -> float | None:
+        pending_speed = self._active_pending_speed()
+        if pending_speed is not None and self._active_pending_transition() is not None:
+            return round((float(pending_speed) / 255.0) * 100.0, 1)
         data = self.coordinator.data or {}
         speed = (data.get("current_effect") or {}).get("speed")
         if speed is None:
@@ -135,6 +229,7 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         data.last_speed = speed
 
         self._prime_pending_transition_for_speed_update()
+        self._set_pending_speed(speed)
         self._cancel_pending_followups()
         await apply_effect_update(api, data, self.coordinator.data or {}, speed=speed)
         pending = self._active_pending_transition()
@@ -153,6 +248,12 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
                     data,
                     "effect_speed_second_apply",
                     coordinator_data=self.coordinator.data or {},
+                    requested_percent=float(value),
+                    device_speed=speed,
+                    target_name=refreshed_pending.target_name,
+                    target_id=refreshed_pending.target_id,
+                )
+                self._schedule_custom_speed_reapply_if_needed(
                     requested_percent=float(value),
                     device_speed=speed,
                     target_name=refreshed_pending.target_name,
