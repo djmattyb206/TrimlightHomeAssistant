@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -19,6 +21,7 @@ from .effects import (
     is_builtin_like_state,
 )
 
+_CUSTOM_SPEED_SECOND_APPLY_DELAY_SECONDS = 0.9
 _SPEED_UPDATE_PENDING_EXPIRY_SECONDS = 15.0
 
 
@@ -134,6 +137,27 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         self._prime_pending_transition_for_speed_update()
         self._cancel_pending_followups()
         await apply_effect_update(api, data, self.coordinator.data or {}, speed=speed)
+        pending = self._active_pending_transition()
+        if pending is not None and pending.target_kind == "custom":
+            await asyncio.sleep(_CUSTOM_SPEED_SECOND_APPLY_DELAY_SECONDS)
+            refreshed_pending = self._active_pending_transition()
+            if (
+                refreshed_pending is not None
+                and refreshed_pending.target_kind == "custom"
+                and refreshed_pending.target_name == pending.target_name
+                and refreshed_pending.target_id == pending.target_id
+            ):
+                await apply_effect_update(api, data, self.coordinator.data or {}, speed=speed)
+                await async_log_event(
+                    self._hass,
+                    data,
+                    "effect_speed_second_apply",
+                    coordinator_data=self.coordinator.data or {},
+                    requested_percent=float(value),
+                    device_speed=speed,
+                    target_name=refreshed_pending.target_name,
+                    target_id=refreshed_pending.target_id,
+                )
         await async_log_event(
             self._hass,
             data,
