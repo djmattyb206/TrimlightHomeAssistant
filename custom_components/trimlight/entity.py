@@ -109,6 +109,8 @@ class TrimlightEntity(CoordinatorEntity[TrimlightCoordinator]):
             if handle is not None:
                 handle.cancel()
                 setattr(data, attr_name, None)
+        data.pending_speed = None
+        data.pending_speed_until = None
 
     def _keep_pending_transition_visible_after_match(
         self,

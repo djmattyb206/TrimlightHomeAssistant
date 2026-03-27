@@ -243,7 +243,7 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
     @property
     def native_value(self) -> float | None:
         pending_speed = self._active_pending_speed()
-        if pending_speed is not None and self._active_pending_transition() is not None:
+        if pending_speed is not None:
             return round((float(pending_speed) / 255.0) * 100.0, 1)
         data = self.coordinator.data or {}
         speed = (data.get("current_effect") or {}).get("speed")
@@ -258,8 +258,8 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         data.last_speed = speed
 
         self._prime_pending_transition_for_speed_update()
-        self._set_pending_speed(speed)
         self._cancel_pending_followups()
+        self._set_pending_speed(speed)
         await apply_effect_update(api, data, self.coordinator.data or {}, speed=speed)
         pending = self._active_pending_transition()
         if pending is not None and pending.target_kind == "custom":

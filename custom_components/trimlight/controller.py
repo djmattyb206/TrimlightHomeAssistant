@@ -8,6 +8,7 @@ from .data import TrimlightData
 from .debug import async_log_event
 from .effects import (
     find_builtin_preset,
+    find_builtin_preset_by_name,
     find_custom_preset_by_id,
     find_custom_preset_by_name,
     find_custom_preset_by_state,
@@ -85,6 +86,98 @@ async def apply_effect_update(
     current_effect = (coordinator_data or {}).get("current_effect") or {}
     effect_id = (coordinator_data or {}).get("current_effect_id")
     category = (coordinator_data or {}).get("current_effect_category")
+    effects = coordinator_data.get("effects") or []
+
+    async def _apply_builtin_match(
+        match: dict[str, Any],
+        *,
+        matched_via: str | None = None,
+    ) -> None:
+        builtin_effect_id = (
+            int(match.get("id")) if match.get("id") is not None else effect_id
+        )
+        pixel_len, reverse = infer_builtin_preview_params(
+            builtin_effect_id or 0, current_effect, effects
+        )
+        response = await api.preview_builtin(
+            match.get("mode", match.get("id")),
+            brightness=brightness,
+            speed=speed,
+            pixel_len=pixel_len,
+            reverse=reverse,
+        )
+        if response.get("code") == 0:
+            effect_name = (match.get("name") or "").strip()
+            if effect_name:
+                data.last_selected_preset = effect_name
+                data.last_selected_custom_preset = None
+                data.last_known_preset = effect_name
+                data.last_known_builtin_preset = effect_name
+            builtin_effect = {
+                "category": 0,
+                "mode": match.get("mode", match.get("id")),
+                "speed": speed,
+                "brightness": brightness,
+                "pixelLen": pixel_len,
+                "reverse": reverse,
+            }
+            _optimistically_apply_effect_update(
+                data,
+                coordinator_data,
+                builtin_effect,
+                effect_id=builtin_effect_id,
+                brightness=brightness,
+                speed=speed,
+            )
+        await async_log_event(
+            data.coordinator.hass,
+            data,
+            "effect_update_preview_builtin",
+            coordinator_data=coordinator_data,
+            effect_id=builtin_effect_id,
+            matched_via=matched_via,
+            requested_brightness=brightness,
+            requested_speed=speed,
+            pixel_len=pixel_len,
+            reverse=reverse,
+            response=response,
+        )
+
+    preferred_builtin = None
+    preferred_builtin_via = None
+    pending = data.pending_transition
+    if pending is not None and pending.target_kind == "builtin":
+        preferred_builtin = find_builtin_preset(
+            data.builtins, pending.target_id, pending.target_mode
+        )
+        if preferred_builtin is None:
+            preferred_builtin = find_builtin_preset_by_name(
+                data.builtins, pending.target_name
+            )
+        if preferred_builtin is not None:
+            preferred_builtin_via = "pending_transition"
+
+    if preferred_builtin is None and data.last_selected_custom_preset is None:
+        preferred_builtin = find_builtin_preset_by_name(
+            data.builtins, data.last_selected_preset
+        )
+        if preferred_builtin is not None:
+            preferred_builtin_via = "last_selected_preset"
+
+    if (
+        preferred_builtin is None
+        and data.last_selected_custom_preset is None
+        and data.last_known_preset == data.last_known_builtin_preset
+    ):
+        preferred_builtin = find_builtin_preset_by_name(
+            data.builtins, data.last_known_builtin_preset
+        )
+        if preferred_builtin is not None:
+            preferred_builtin_via = "last_known_builtin_preset"
+
+    if preferred_builtin is not None and category in (1, 2):
+        await _apply_builtin_match(preferred_builtin, matched_via=preferred_builtin_via)
+        return
 
     if category in (1, 2):
         presets = (coordinator_data.get("custom_effects") or data.custom_cache)
@@ -283,41 +376,4 @@ async def apply_effect_update(
                 requested_speed=speed,
             )
             return
-        effects = coordinator_data.get("effects") or []
-        pixel_len, reverse = infer_builtin_preview_params(effect_id, current_effect, effects)
-        response = await api.preview_builtin(
-            match.get("mode", match.get("id")),
-            brightness=brightness,
-            speed=speed,
-            pixel_len=pixel_len,
-            reverse=reverse,
-        )
-        if response.get("code") == 0:
-            builtin_effect = {
-                "category": 0,
-                "mode": match.get("mode", match.get("id")),
-                "speed": speed,
-                "brightness": brightness,
-                "pixelLen": pixel_len,
-                "reverse": reverse,
-            }
-            _optimistically_apply_effect_update(
-                data,
-                coordinator_data,
-                builtin_effect,
-                effect_id=effect_id,
-                brightness=brightness,
-                speed=speed,
-            )
-        await async_log_event(
-            data.coordinator.hass,
-            data,
-            "effect_update_preview_builtin",
-            coordinator_data=coordinator_data,
-            effect_id=effect_id,
-            requested_brightness=brightness,
-            requested_speed=speed,
-            pixel_len=pixel_len,
-            reverse=reverse,
-            response=response,
-        )
+        await _apply_builtin_match(match, matched_via="current_state")
