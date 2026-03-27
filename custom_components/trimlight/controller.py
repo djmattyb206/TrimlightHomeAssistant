@@ -69,6 +69,7 @@ def _optimistically_apply_effect_update(
     updated["brightness"] = int(brightness)
     updated["current_effect_category"] = current.get("category", updated.get("current_effect_category"))
     updated["current_effect_id"] = effect_id if effect_id is not None else updated.get("current_effect_id")
+    updated["switch_state"] = 1
     data.coordinator.async_set_updated_data(updated)
 
 

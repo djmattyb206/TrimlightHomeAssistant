@@ -256,6 +256,8 @@ class TrimlightSpeedNumber(TrimlightEntity, NumberEntity):
         data = self._data
         api = data.api
         data.last_speed = speed
+        data.forced_off_until = None
+        data.forced_on_until = time.monotonic() + _SPEED_UPDATE_PENDING_EXPIRY_SECONDS
 
         self._prime_pending_transition_for_speed_update()
         self._cancel_pending_followups()
