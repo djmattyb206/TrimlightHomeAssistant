@@ -52,6 +52,8 @@ DEFAULT_TIMING_S = {
     "after_refresh": 5,
 }
 
+TURN_OFF_SETTLE_BUFFER_S = 1.0
+
 DEFAULT_SCENARIOS = [
     "refresh_presets",
     "power_baseline",
@@ -445,7 +447,11 @@ class TrimlightTestRunner:
             domain="light",
             service="turn_off",
             service_data={"entity_id": self.config.entity_ids["light"]},
-            settle_s=self.config.timing_s["after_power_off"],
+            # Home Assistant sometimes reflects the light entity one beat behind
+            # the sensor/select entities on power-off. Give the off-step a small
+            # extra buffer so the full-suite pass/fail result matches the next
+            # step's observed starting state.
+            settle_s=self.config.timing_s["after_power_off"] + TURN_OFF_SETTLE_BUFFER_S,
             settle_condition=lambda snapshot: (
                 self.is_state_eq(snapshot, "light", "off")
                 and self.is_state_eq(snapshot, "indicator_sensor", "Off")
