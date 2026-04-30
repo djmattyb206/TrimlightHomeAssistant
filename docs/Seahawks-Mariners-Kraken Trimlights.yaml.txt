@@ -1,0 +1,45 @@
+alias: Seahawks/Mariners/Kraken Trimlights
+description: ""
+triggers:
+  - trigger: state
+    entity_id:
+      - sensor.seahawks_team_tracker
+      - sensor.mariners_team_tracker
+      - sensor.kraken_team_tracker
+    to: "IN"
+  - trigger: state
+    entity_id:
+      - sensor.seahawks_team_tracker
+      - sensor.mariners_team_tracker
+      - sensor.kraken_team_tracker
+    to: "POST"
+actions:
+  - variables:
+      preset: >
+        {% if is_state('sensor.seahawks_team_tracker', 'IN') %}
+          Seahawks
+        {% elif is_state('sensor.mariners_team_tracker', 'IN') %}
+          Mariners
+        {% elif is_state('sensor.kraken_team_tracker', 'IN') %}
+          Kraken
+        {% else %}
+          none
+        {% endif %}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ preset != 'none' }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: light.trimlight
+          - action: select.select_option
+            target:
+              entity_id: select.trimlight_custom_preset
+            data:
+              option: "{{ preset }}"
+    default:
+      - action: light.turn_off
+        target:
+          entity_id: light.trimlight
+mode: restart

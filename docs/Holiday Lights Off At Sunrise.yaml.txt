@@ -1,0 +1,27 @@
+alias: Holiday Lights Off At Sunrise
+description: ""
+triggers:
+  - trigger: sun
+    event: sunrise
+    offset: "00:15:00"
+conditions:
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: sensor.seahawks_team_tracker
+        state: IN
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: sensor.mariners_team_tracker
+        state: IN
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: sensor.kraken_team_tracker
+        state: IN
+actions:
+  - action: light.turn_off
+    target:
+      entity_id: light.trimlight
+mode: single

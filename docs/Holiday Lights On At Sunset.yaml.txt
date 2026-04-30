@@ -1,0 +1,88 @@
+alias: Holiday Lights On At Sunset
+description: ""
+triggers:
+  - trigger: sun
+    event: sunset
+    offset: "00:15:00"
+conditions:
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: sensor.seahawks_team_tracker
+        state: IN
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: sensor.mariners_team_tracker
+        state: IN
+  - condition: not
+    conditions:
+      - condition: state
+        entity_id: sensor.kraken_team_tracker
+        state: IN
+actions:
+  - variables:
+      preset: >
+        {% set today = now().date() %} {% set y = today.year %} {% set m =
+        today.month %} {% set d = today.day %}
+
+        {# Easter calculation #} {% set a = y % 19 %} {% set b = y // 100 %} {%
+        set c = y % 100 %} {% set d1 = b // 4 %} {% set e = b % 4 %} {% set f =
+        (b + 8) // 25 %} {% set g = (b - f + 1) // 3 %} {% set h = (19 * a + b -
+        d1 - g + 15) % 30 %} {% set i = c // 4 %} {% set k = c % 4 %} {% set l =
+        (32 + 2 * e + 2 * i - h - k) % 7 %} {% set m1 = (a + 11 * h + 22 * l) //
+        451 %} {% set easter_month = (h + l - 7 * m1 + 114) // 31 %} {% set
+        easter_day = ((h + l - 7 * m1 + 114) % 31) + 1 %} {% set easter =
+        as_datetime('%04d-%02d-%02d' | format(y, easter_month,
+        easter_day)).date() %} {% set mardi_gras = easter - timedelta(days=47)
+        %}
+
+        {# Mother's Day = second Sunday in May #} {% set may1 =
+        as_datetime('%04d-05-01' | format(y)).date() %} {% set
+        first_sunday_offset = (6 - may1.weekday()) % 7 %} {% set mothers_day =
+        may1 + timedelta(days=first_sunday_offset + 7) %}
+
+        {# Thanksgiving = fourth Thursday in November #} {% set nov1 =
+        as_datetime('%04d-11-01' | format(y)).date() %} {% set
+        first_thursday_offset = (3 - nov1.weekday()) % 7 %} {% set thanksgiving
+        = nov1 + timedelta(days=first_thursday_offset + 21) %} {% set
+        christmas_start = thanksgiving + timedelta(days=1) %}
+
+        {% if (m == 12 and d >= 26) or (m == 1 and d == 1) %}
+          NEW YEAR
+        {% elif m == 2 and 7 <= d <= 14 %}
+          VALENTINE'S DAY
+        {% elif 0 <= (mardi_gras - today).days <= 7 %}
+          Mardi Gras
+        {% elif m == 3 and 10 <= d <= 17 %}
+          ST.PATRICK'S DAY
+        {% elif 0 <= (easter - today).days <= 7 %}
+          Easter
+        {% elif 0 <= (mothers_day - today).days <= 7 %}
+          MOTHER'S DAY
+        {% elif (m == 6 and d >= 27) or (m == 7 and d <= 4) %}
+          INDEPENDENCE DAY
+        {% elif m == 10 and 24 <= d <= 31 %}
+          Halloween purple
+        {% elif 0 <= (thanksgiving - today).days <= 7 %}
+          Thanksgiving Fall Leaves
+        {% elif christmas_start <= today <= as_datetime('%04d-12-25' |
+        format(y)).date() %}
+          CHRISTMAS
+        {% else %}
+          none
+        {% endif %}
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ preset != 'none' }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: light.trimlight
+          - action: select.select_option
+            target:
+              entity_id: select.trimlight_custom_preset
+            data:
+              option: "{{ preset }}"
+mode: single
